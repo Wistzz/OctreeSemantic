@@ -74,6 +74,10 @@ class OptimizationParams(ParamGroup):
         self.ins_feat_dim = 6
         self.position_lr_init = 0.00016
         self.position_lr_final = 0.0000016
+        self.offset_lr_init = 0.01
+        self.offset_lr_final = 0.0001
+        self.offset_lr_delay_mult = 0.01
+        self.offset_lr_max_steps = 30_000
         self.position_lr_delay_mult = 0.01
         self.position_lr_max_steps = 30_000
         self.feature_lr = 0.0025
@@ -89,6 +93,8 @@ class OptimizationParams(ParamGroup):
         self.densify_until_iter = 15_000
         self.densify_grad_threshold = 0.0002
         self.random_background = False
+        self.coarse_factor=1.5
+        self.coarse_iter=10000
 
         parser.add_argument('--root_node_num', type=int, default=64)    # k1=64
         parser.add_argument('--leaf_node_num', type=int, default=5)     # k2=5/10

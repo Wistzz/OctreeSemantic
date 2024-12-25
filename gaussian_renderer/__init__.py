@@ -19,6 +19,7 @@ from utils.opengs_utlis import *
 # from sklearn.neighbors import NearestNeighbors
 # import pytorch3d.ops
 import faiss
+from gsplat.cuda._wrapper import fully_fused_projection
 
 def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, iteration,
             scaling_modifier = 1.0, override_color = None, visible_mask = None, mask_num=0,
@@ -35,15 +36,19 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
             pre_mask=None,
             seg_rgb=False,          # render cluster rgb, not feat
             post_process=False,     # post
-            root_num=64, leaf_num=10):  # k1, k2 
+            root_num=64, leaf_num=10, ape_code=-1):  # k1, k2 
     """
     Render the scene. 
     
     Background tensor (bg_color) must be on GPU!
     """
- 
+
+    pc.set_anchor_mask(viewpoint_camera.camera_center, iteration, viewpoint_camera.resolution_scale)
+    visible_mask = prefilter_voxel(viewpoint_camera, pc, pipe, bg_color).squeeze()
+    xyz, color, opacity, scaling, rot, sh_degree, selection_mask = pc.generate_neural_gaussians(viewpoint_camera, visible_mask, ape_code)
+
     # Create zero tensor. We will use it to make pytorch return gradients of the 2D (screen-space) means
-    screenspace_points = torch.zeros_like(pc.get_xyz, dtype=pc.get_xyz.dtype, requires_grad=True, device="cuda") + 0
+    screenspace_points = torch.zeros_like(xyz, dtype=pc.get_xyz.dtype, requires_grad=True, device="cuda") + 0
     try:
         screenspace_points.retain_grad()
     except:
@@ -70,7 +75,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
 
     rasterizer = GaussianRasterizer(raster_settings=raster_settings)
 
-    means3D = pc.get_xyz
+    means3D = xyz
     means2D = screenspace_points
     opacity = pc.get_opacity
 
@@ -392,3 +397,63 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
             "viewspace_points": screenspace_points,
             "visibility_filter" : radii > 0,
             "radii": radii}
+
+def prefilter_voxel(viewpoint_camera, pc, pipe, bg_color):
+    """
+    Render the scene. 
+    
+    Background tensor (bg_color) must be on GPU!
+    """
+    
+    means = pc.get_anchor[pc._anchor_mask]
+    scales = pc.get_scaling[pc._anchor_mask][:, :3]
+    quats = pc.get_rotation[pc._anchor_mask]
+    # Set up rasterization configuration
+    tanfovx = math.tan(viewpoint_camera.FoVx * 0.5)
+    tanfovy = math.tan(viewpoint_camera.FoVy * 0.5)
+    focal_length_x = viewpoint_camera.image_width / (2 * tanfovx)
+    focal_length_y = viewpoint_camera.image_height / (2 * tanfovy)
+
+    Ks = torch.tensor([
+            [focal_length_x, 0, viewpoint_camera.image_width / 2.0],
+            [0, focal_length_y, viewpoint_camera.image_height / 2.0],
+            [0, 0, 1],
+        ],device="cuda",)[None]
+    viewmats = viewpoint_camera.world_view_transform.transpose(0, 1)[None]
+
+    N = means.shape[0]
+    C = viewmats.shape[0]
+    device = means.device
+    assert means.shape == (N, 3), means.shape
+    assert quats.shape == (N, 4), quats.shape
+    assert scales.shape == (N, 3), scales.shape
+    assert viewmats.shape == (C, 4, 4), viewmats.shape
+    assert Ks.shape == (C, 3, 3), Ks.shape
+
+    # Project Gaussians to 2D. Directly pass in {quats, scales} is faster than precomputing covars.
+    proj_results = fully_fused_projection(
+        means,
+        None,  # covars,
+        quats,
+        scales,
+        viewmats,
+        Ks,
+        int(viewpoint_camera.image_width),
+        int(viewpoint_camera.image_height),
+        eps2d=0.3,
+        packed=False,
+        near_plane=0.01,
+        far_plane=1e10,
+        radius_clip=0.0,
+        sparse_grad=False,
+        calc_compensations=False,
+    )
+    
+    # The results are with shape [C, N, ...]. Only the elements with radii > 0 are valid.
+    radii, means2d, depths, conics, compensations = proj_results
+    camera_ids, gaussian_ids = None, None
+    
+    visible_mask = pc._anchor_mask.clone()
+    visible_mask[pc._anchor_mask] = radii.squeeze(0) > 0
+    
+    return visible_mask

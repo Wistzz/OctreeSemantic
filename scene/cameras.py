@@ -16,7 +16,7 @@ from utils.graphics_utils import getWorld2View2, getProjectionMatrix
 
 class Camera(nn.Module):
     def __init__(self, colmap_id, R, T, FoVx, FoVy, cx, cy, image, depth, gt_alpha_mask,
-                 gt_sam_mask, gt_mask_feat,
+                 gt_sam_mask, gt_mask_feat, 
                  image_name, uid,
                  trans=np.array([0.0, 0.0, 0.0]), scale=1.0, data_device = "cuda"
                  ):
@@ -33,6 +33,7 @@ class Camera(nn.Module):
         self.cy = cy
         # modify -----
         self.image_name = image_name
+        self.resolution_scale = 1.0#resolution_scale
 
         try:
             self.data_device = torch.device(data_device)
