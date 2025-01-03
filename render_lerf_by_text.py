@@ -19,7 +19,7 @@ from gaussian_renderer import render
 import torchvision
 from utils.general_utils import safe_state
 from argparse import ArgumentParser
-from arguments import ModelParams, PipelineParams, get_combined_args
+from arguments import ModelParams, OptimizationParams, PipelineParams, get_combined_args
 from gaussian_renderer import GaussianModel
 import numpy as np
 import json
@@ -66,7 +66,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
     leaf_num = leaf_lang_feat.shape[0] / root_num
 
     # text feature
-    with open('assets/IMG8304_features.json', 'r') as f:
+    with open('assets/text_features.json', 'r') as f:
         data_loaded = json.load(f)
     all_texts = list(data_loaded.keys())
     text_features = torch.from_numpy(np.array(list(data_loaded.values()))).to(torch.float32)  # [num_text, 512]
@@ -160,7 +160,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
             if  view.image_name not in candidate_frames:
                 continue
 
-            render_pkg = render(view, gaussians, pipeline, background, iteration, rescale=False)
+            render_pkg = render(view, gaussians, pipeline, background, iteration, rescale=False, training=False)
             # RGB
             rendering = render_pkg["render"]
             gt = view.original_image[0:3, :, :]
@@ -197,7 +197,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
                                 better_vis=True,
                                 seg_rgb=True,
                                 post_process=True,
-                                root_num=root_num, leaf_num=leaf_num)
+                                root_num=root_num, leaf_num=leaf_num, training=False)
             rendered_cluster_imgs = render_pkg["leaf_clusters_imgs"]
             occured_leaf_id = render_pkg["occured_leaf_id"]
             rendered_leaf_cluster_silhouettes = render_pkg["leaf_cluster_silhouettes"]
@@ -215,12 +215,12 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
                 torchvision.utils.save_image(cluster_silhouette.to(torch.float32), os.path.join(render_cluster_silhouette_path, \
                     view.image_name + f"_{target_text[t_i]}.png"))
         
-def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool,
+def render_sets(dataset : ModelParams, opt : OptimizationParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool,
                 scene_name: str):
     with torch.no_grad():
         gaussians = GaussianModel(dataset.sh_degree)
         scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
-
+        gaussians.set_coarse_interval(opt)
         # bg_color = [1,1,1] if dataset.white_background else [0, 0, 0]
         bg_color = [1,1,1]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
@@ -236,6 +236,7 @@ if __name__ == "__main__":
     # Set up command line argument parser
     parser = ArgumentParser(description="Testing script parameters")
     model = ModelParams(parser, sentinel=True)
+    op = OptimizationParams(parser)
     pipeline = PipelineParams(parser)
     parser.add_argument("--iteration", default=-1, type=int)
     parser.add_argument("--skip_train", action="store_true")
@@ -252,4 +253,4 @@ if __name__ == "__main__":
     # Initialize system state (RNG)
     safe_state(args.quiet)
 
-    render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test, args.scene_name)
+    render_sets(model.extract(args), op.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test, args.scene_name)

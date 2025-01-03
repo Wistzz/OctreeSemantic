@@ -36,19 +36,19 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
             pre_mask=None,
             seg_rgb=False,          # render cluster rgb, not feat
             post_process=False,     # post
-            root_num=64, leaf_num=10, ape_code=-1):  # k1, k2 
+            root_num=64, leaf_num=10, ape_code=-1, training=True):  # k1, k2 
     """
     Render the scene. 
     
     Background tensor (bg_color) must be on GPU!
     """
-
+    # if training == True:
     pc.set_anchor_mask(viewpoint_camera.camera_center, iteration, viewpoint_camera.resolution_scale)
     visible_mask = prefilter_voxel(viewpoint_camera, pc, pipe, bg_color).squeeze()
+    # visible_mask = (torch.ones((pc._anchor.shape[0]))==1)
     xyz, color, opacity, scaling, rot, sh_degree, selection_mask = pc.generate_neural_gaussians(viewpoint_camera, visible_mask, ape_code)
-
     # Create zero tensor. We will use it to make pytorch return gradients of the 2D (screen-space) means
-    screenspace_points = torch.zeros_like(xyz, dtype=pc.get_xyz.dtype, requires_grad=True, device="cuda") + 0
+    screenspace_points = torch.zeros_like(xyz, dtype=xyz.dtype, requires_grad=True, device="cuda") + 0
     try:
         screenspace_points.retain_grad()
     except:
@@ -77,7 +77,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
 
     means3D = xyz
     means2D = screenspace_points
-    opacity = pc.get_opacity
+    # opacity = pc.get_opacity
 
     # If precomputed 3d covariance is provided, use it. If not, then it will be computed from
     # scaling / rotation by the rasterizer.
@@ -87,8 +87,8 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     if pipe.compute_cov3D_python:
         cov3D_precomp = pc.get_covariance(scaling_modifier)
     else:
-        scales = pc.get_scaling
-        rotations = pc.get_rotation
+        scales = scaling#pc.get_scaling
+        rotations = rot#pc.get_rotation
 
     # If precomputed colors are provided, use them. Otherwise, if it is desired to precompute colors
     # from SHs in Python, do it. If not, then SH -> RGB conversion will be done by rasterizer.
@@ -102,7 +102,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
             sh2rgb = eval_sh(pc.active_sh_degree, shs_view, dir_pp_normalized)
             colors_precomp = torch.clamp_min(sh2rgb + 0.5, 0.0)
         else:
-            shs = pc.get_features
+            shs = color#pc.get_features
     else:
         colors_precomp = override_color
 
@@ -131,6 +131,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     if render_feat_map:
         # get feature
         ins_feat = (pc.get_ins_feat(origin=origin_feat) + 1) / 2   # pseudo -> norm, else -> raw
+        ins_feat = ins_feat[visible_mask]
         # first three channels
         rendered_ins_feat, _, _, _ = rasterizer(
             means3D = means3D,
@@ -179,11 +180,13 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     viewed_pts = radii > 0      # ignore the invisible points
     if cluster_idx is not None:
         num_cluster = cluster_idx.max() + 1
+        cluster_idx = cluster_idx[visible_mask]
         cluster_occur = torch.zeros(num_cluster).to(torch.bool) # [num_cluster], bool
     else:
         cluster_occur = None
     if render_cluster and cluster_idx is not None and viewed_pts.sum() != 0:
         ins_feat = (pc.get_ins_feat(origin=origin_feat) + 1) / 2   # pseudo -> norm, else -> raw
+        ins_feat = ins_feat[visible_mask]
         rendered_clusters = []
         rendered_cluster_silhouettes = []
         scale_filter = (scales < 0.5).all(dim=1)    #   filter
@@ -197,14 +200,12 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
             
             # NOTE: Render only the idx-th coarse cluster
             filter_idx = cluster_idx == idx
-            
             filter_idx = filter_idx & viewed_pts
             # todo: filter
             if better_vis:
                 filter_idx = filter_idx & scale_filter
                 if filter_idx.sum() < 100:
                     continue
-                    
             # render cluster-level feat map
             rendered_cluster, _, _, cluster_silhouette = rasterizer(
                 means3D = means3D[filter_idx],
@@ -249,7 +250,9 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     #   - occured_leaf_id: visible fine cluster id                  #
     # ###############################################################
     if leaf_cluster_idx is not None and leaf_cluster_idx.numel() > 0:
+        leaf_cluster_idx = leaf_cluster_idx[visible_mask]
         ins_feat = (pc.get_ins_feat(origin=origin_feat) + 1) / 2   # pseudo -> norm, else -> raw
+        ins_feat = ins_feat[visible_mask]
         # todo: rescale
         scale_filter = (scales < 0.1).all(dim=1)
         # scale_filter = (scales < 0.1).all(dim=1) & (opacity > 0.1).squeeze(-1)
@@ -337,7 +340,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
             occured_leaf_id.append(leaf_idx)
 
             # NOTE object removal simple edition
-            filter_idx = ~filter_idx
+            # filter_idx = ~filter_idx
 
             # note: render cluster rgb or feat.
             if seg_rgb:
@@ -396,7 +399,8 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
             "cluster_occur": cluster_occur,         # coarse cluster
             "viewspace_points": screenspace_points,
             "visibility_filter" : radii > 0,
-            "radii": radii}
+            "radii": radii,
+            "visible_mask": visible_mask}
 
 def prefilter_voxel(viewpoint_camera, pc, pipe, bg_color):
     """

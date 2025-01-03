@@ -344,6 +344,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             render_cluster=False
             cluster_indices=None
         # rescale
+
         if iteration > opt.start_root_cb_iter:  # stage 2, rescale
             rescale=True
         else:
@@ -387,7 +388,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # Start learning instance features after 3W steps.
         if iteration > opt.start_ins_feat_iter:
             # NOTE: Freeze the pre-trained Gaussian parameters and only train the instance features.
-            scene.gaussians._xyz = scene.gaussians._xyz.detach()
+            scene.gaussians._anchor = scene.gaussians._anchor.detach()
             scene.gaussians._features_dc = scene.gaussians._features_dc.detach()
             scene.gaussians._features_rest = scene.gaussians._features_rest.detach()
             scene.gaussians._opacity = scene.gaussians._opacity.detach()
@@ -454,6 +455,15 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             loss = loss + mask_loss
         
         if no_need_bk == False:
+            # mask = render_pkg['visible_mask']
+            # for group in gaussians.optimizer.param_groups:
+            #     for param in group['params']:
+            #         if param.grad is not None:
+            #             grad_selected = param.grad[mask]
+            #             grad_full = torch.zeros_like(param.grad)
+            #             grad_full[mask] = grad_selected
+            #             param.grad = grad_full
+            #             breakpoint()
             loss.backward()
 
         iter_end.record()
@@ -550,18 +560,21 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     scene.save(iteration)
 
             # Densification
-            if iteration < opt.densify_until_iter and \
+            if iteration < opt.update_until and \
                 not opt.frozen_init_pts: # note: ScanNet dataset is not densified [OpenGaussian]
                 # Keep track of max radii in image-space for pruning
-                gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
-                gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
+                # gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
+                # gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
 
-                if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
-                    size_threshold = 20 if iteration > opt.opacity_reset_interval else None
-                    gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
 
-                if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
-                    gaussians.reset_opacity()
+                if iteration > opt.update_from and iteration % opt.update_interval == 0:
+                    gaussians.run_densify(iteration, opt)
+                # if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
+                #     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
+                #     gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
+
+                # if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
+                #     gaussians.reset_opacity()
 
             # Optimizer step
             if iteration < opt.iterations:

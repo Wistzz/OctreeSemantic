@@ -253,7 +253,7 @@ class Quantize_kMeans():
         if mode == "root":
             # (1) coarse-level: feature + xyz
             scale = pos_weight     # TODO
-            xyz_feat = gaussian._xyz.detach() * scale
+            xyz_feat = gaussian._anchor.detach() * scale
             feat = torch.cat((gaussian._ins_feat, xyz_feat), dim=1)    # [N, 9]
         elif mode == "leaf":
             # (2) fine-level: feature only

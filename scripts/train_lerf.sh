@@ -13,10 +13,10 @@
 # --save_memory: Saves memory, but will reduce training speed. If your GPU memory > 24GB, you can omit this flag
 ###############################################
 # scan="figurines"
-# gpu_num=3           # change
+# gpu_num=7           # change
 # echo "Training for ${scan} ....."
-# CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 601$gpu_num \
-#     -s /gdata/cold1/wuyanmin/OpenGaussian/data/lerf_ovs/${scan} \
+# CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 602$gpu_num \
+#     -s /data/sunwei/OpenGaussian/data/lerf_ovs/${scan} \
 #     --iterations 70_000 \
 #     --start_ins_feat_iter 30_000 \
 #     --start_root_cb_iter 40_000 \
@@ -90,9 +90,9 @@
 # # No need to set save_memory, 24G is sufficient.
 # ###############################################
 scan="ramen"
-gpu_num=2
+gpu_num=1
 echo "Training for ${scan} ....."
-CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 602$gpu_num \
+CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 603$gpu_num \
     -s /data/sunwei/OpenGaussian/data/lerf_ovs/${scan} \
     --iterations 70_000 \
     --start_ins_feat_iter 30_000 \
