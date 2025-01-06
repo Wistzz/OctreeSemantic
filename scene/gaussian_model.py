@@ -387,7 +387,6 @@ class GaussianModel:
     def set_anchor_mask(self, cam_center, iteration, resolution_scale):
         dist = torch.sqrt(torch.sum((self._anchor - cam_center)**2, dim=1)) * resolution_scale
         pred_level = torch.log2(self.standard_dist/dist)/math.log2(self.fork) + self._extra_level
-        
         if self.progressive:
             coarse_index = np.searchsorted(self.coarse_intervals, iteration) + 1 + self.init_level
         else:

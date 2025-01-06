@@ -459,5 +459,4 @@ def prefilter_voxel(viewpoint_camera, pc, pipe, bg_color):
     
     visible_mask = pc._anchor_mask.clone()
     visible_mask[pc._anchor_mask] = radii.squeeze(0) > 0
-    
     return visible_mask
