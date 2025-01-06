@@ -46,7 +46,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     pc.set_anchor_mask(viewpoint_camera.camera_center, iteration, viewpoint_camera.resolution_scale)
     visible_mask = prefilter_voxel(viewpoint_camera, pc, pipe, bg_color).squeeze()
     # visible_mask = (torch.ones((pc._anchor.shape[0]))==1)
-    xyz, color, opacity, scaling, rot, sh_degree, selection_mask = pc.generate_neural_gaussians(viewpoint_camera, visible_mask, ape_code)
+    xyz, color, opacity, scaling, rot, semantic, sh_degree, selection_mask = pc.generate_neural_gaussians(viewpoint_camera, visible_mask, ape_code)
     # Create zero tensor. We will use it to make pytorch return gradients of the 2D (screen-space) means
     screenspace_points = torch.zeros_like(xyz, dtype=xyz.dtype, requires_grad=True, device="cuda") + 0
     try:
@@ -110,15 +110,14 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
         rendered_image, radii, rendered_depth, rendered_alpha = rasterizer(
             means3D = means3D,
             means2D = means2D,
-            shs = shs,
-            colors_precomp = colors_precomp,
+            shs = None,
+            colors_precomp = color,
             opacities = opacity,
             scales = scales,
             rotations = rotations,
             cov3D_precomp = cov3D_precomp)
     else:
         rendered_image, radii, rendered_depth, rendered_alpha = None, None, None, None
-
     # ################################################################
     # [Stage 1, Stage 2.1] Render image-level instance feature map   #
     #   - rendered_ins_feat: image-level feat map                    #
@@ -130,8 +129,9 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
         rescale_factor = torch.rand(1).cuda()
     if render_feat_map:
         # get feature
-        ins_feat = (pc.get_ins_feat(origin=origin_feat) + 1) / 2   # pseudo -> norm, else -> raw
-        ins_feat = ins_feat[visible_mask]
+        # ins_feat = (pc.get_ins_feat(origin=origin_feat) + 1) / 2   # pseudo -> norm, else -> raw
+        # ins_feat = ins_feat[visible_mask]
+        ins_feat = semantic
         # first three channels
         rendered_ins_feat, _, _, _ = rasterizer(
             means3D = means3D,
@@ -140,9 +140,9 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
             colors_precomp = ins_feat[:, :3],   # render features as pre-computed colors
             opacities = opacity,
             scales = scales * rescale_factor,
-
             rotations = rotations,
             cov3D_precomp = cov3D_precomp)
+        breakpoint()
         # last three channels
         if ins_feat.shape[-1] > 3:
             rendered_ins_feat2, _, _, _ = rasterizer(
@@ -160,8 +160,8 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
         _, _, _, silhouette = rasterizer(
             means3D = means3D,
             means2D = means2D,
-            shs = shs,
-            colors_precomp = colors_precomp,
+            shs = None,
+            colors_precomp = color,
             opacities = opacity,
             scales = scales * rescale_factor,
             # opacities = opacity*0+1.0,    # 
@@ -185,8 +185,9 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     else:
         cluster_occur = None
     if render_cluster and cluster_idx is not None and viewed_pts.sum() != 0:
-        ins_feat = (pc.get_ins_feat(origin=origin_feat) + 1) / 2   # pseudo -> norm, else -> raw
-        ins_feat = ins_feat[visible_mask]
+        # ins_feat = (pc.get_ins_feat(origin=origin_feat) + 1) / 2   # pseudo -> norm, else -> raw
+        # ins_feat = ins_feat[visible_mask]
+        ins_feat = semantic
         rendered_clusters = []
         rendered_cluster_silhouettes = []
         scale_filter = (scales < 0.5).all(dim=1)    #   filter
@@ -251,8 +252,9 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     # ###############################################################
     if leaf_cluster_idx is not None and leaf_cluster_idx.numel() > 0:
         leaf_cluster_idx = leaf_cluster_idx[visible_mask]
-        ins_feat = (pc.get_ins_feat(origin=origin_feat) + 1) / 2   # pseudo -> norm, else -> raw
-        ins_feat = ins_feat[visible_mask]
+        # ins_feat = (pc.get_ins_feat(origin=origin_feat) + 1) / 2   # pseudo -> norm, else -> raw
+        # ins_feat = ins_feat[visible_mask]
+        ins_feat = semantic
         # todo: rescale
         scale_filter = (scales < 0.1).all(dim=1)
         # scale_filter = (scales < 0.1).all(dim=1) & (opacity > 0.1).squeeze(-1)

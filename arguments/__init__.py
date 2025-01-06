@@ -88,6 +88,23 @@ class OptimizationParams(ParamGroup):
         self.percent_dense = 0.01
         self.lambda_dssim = 0.2
         self.update_interval = 100
+
+        self.mlp_opacity_lr_init = 0.002
+        self.mlp_opacity_lr_final = 0.00002
+        self.mlp_opacity_lr_delay_mult = 0.01
+        self.mlp_opacity_lr_max_steps = 30000
+        self.mlp_cov_lr_init = 0.004
+        self.mlp_cov_lr_final = 0.004
+        self.mlp_cov_lr_delay_mult = 0.01
+        self.mlp_cov_lr_max_steps = 30000
+        self.mlp_color_lr_init = 0.008
+        self.mlp_color_lr_final = 0.00005
+        self.mlp_color_lr_delay_mult = 0.01
+        self.mlp_color_lr_max_steps = 30000
+        self.mlp_semantic_lr_init = 0.002
+        self.mlp_semantic_lr_final = 0.00002
+        self.mlp_semantic_lr_delay_mult = 0.01
+        self.mlp_semantic_lr_max_steps = 30000
         #-----------------------------
         self.success_threshold = 0.8
         self.update_ratio = 0.2
