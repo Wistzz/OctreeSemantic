@@ -95,7 +95,6 @@ class Quantize_kMeans():
         # If max is too large, exclude it and consider the next biggest. Use for loop for
         # the excluded clusters and a single operation for the remaining ones for
         # updating the cluster centers.
-
         unq, n_unq = torch.unique(self.nn_index, return_counts=True)
         # Find max cluster size and exclude clusters greater than a threshold
         topk = 100
@@ -103,6 +102,7 @@ class Quantize_kMeans():
             topk = len(n_unq)
         max_cnt_topk, topk_idx = torch.topk(n_unq, topk)
         self.max_cnt = max_cnt_topk[0]
+
         idx = 0
         self.excl_clusters = []
         self.excl_cluster_ids = []
@@ -147,7 +147,6 @@ class Quantize_kMeans():
 
         # quantize with kmeans
         feat = feat.detach()    # [N, dim]
-
         if feat_scaled is None:
             feat_scaled = feat
             scale = feat[0] / (feat_scaled[0] + 1e-8)
@@ -253,12 +252,12 @@ class Quantize_kMeans():
         if mode == "root":
             # (1) coarse-level: feature + xyz
             scale = pos_weight     # TODO
-            xyz_feat = gaussian._anchor.detach() * scale
+            # xyz_feat = gaussian._anchor.detach() * scale
+            xyz_feat = gaussian._xyz.detach() * scale
             feat = torch.cat((gaussian._ins_feat, xyz_feat), dim=1)    # [N, 9]
         elif mode == "leaf":
             # (2) fine-level: feature only
             feat = gaussian._ins_feat
-
         if assign:
             self.cluster_assign(feat, mode=mode, selected_leaf=selected_leaf)   # gaussian._ins_feat
         else:

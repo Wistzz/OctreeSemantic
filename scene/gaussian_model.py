@@ -77,7 +77,7 @@ class GaussianModel:
         self._extra_level = torch.empty(0)
         self._anchor_feat = torch.empty(0)
         self._anchor_feat_semantic =  torch.empty(0)
-        # self._xyz = torch.empty(0)
+        self._xyz = torch.empty(0)
         self._features_dc = torch.empty(0)
         self._features_rest = torch.empty(0)
         self._scaling = torch.empty(0)
@@ -721,7 +721,7 @@ class GaussianModel:
         # opacities = self._opacity[level_mask].detach().cpu().numpy()
         scale = self._scaling[level_mask].detach().cpu().numpy()
         rotation = self._rotation[level_mask].detach().cpu().numpy()
-        ins_feat = self._ins_feat[level_mask].detach().cpu().numpy()
+        # ins_feat = self._ins_feat[level_mask].detach().cpu().numpy()
         dtype_full = [(attribute, 'f4') for attribute in self.construct_list_of_attributes()]
 
 
@@ -860,6 +860,11 @@ class GaussianModel:
     def _prune_optimizer(self, mask):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
+            if  'mlp' in group['name'] or \
+                'conv' in group['name'] or \
+                'embedding' in group['name']:
+                continue
+
             stored_state = self.optimizer.state.get(group['params'][0], None)
             if stored_state is not None:
                 stored_state["exp_avg"] = stored_state["exp_avg"][mask]
@@ -868,12 +873,38 @@ class GaussianModel:
                 del self.optimizer.state[group['params'][0]]
                 group["params"][0] = nn.Parameter((group["params"][0][mask].requires_grad_(True)))
                 self.optimizer.state[group['params'][0]] = stored_state
-
+                if group['name'] == "scaling":
+                    scales = group["params"][0]
+                    temp = scales[:,3:]
+                    temp[temp>0.05] = 0.05
+                    group["params"][0][:,3:] = temp
                 optimizable_tensors[group["name"]] = group["params"][0]
             else:
                 group["params"][0] = nn.Parameter(group["params"][0][mask].requires_grad_(True))
+                if group['name'] == "scaling":
+                    scales = group["params"][0]
+                    temp = scales[:,3:]
+                    temp[temp>0.05] = 0.05
+                    group["params"][0][:,3:] = temp
                 optimizable_tensors[group["name"]] = group["params"][0]
+            
         return optimizable_tensors
+        # optimizable_tensors = {}
+        # for group in self.optimizer.param_groups:
+        #     stored_state = self.optimizer.state.get(group['params'][0], None)
+        #     if stored_state is not None:
+        #         stored_state["exp_avg"] = stored_state["exp_avg"][mask]
+        #         stored_state["exp_avg_sq"] = stored_state["exp_avg_sq"][mask]
+
+        #         del self.optimizer.state[group['params'][0]]
+        #         group["params"][0] = nn.Parameter((group["params"][0][mask].requires_grad_(True)))
+        #         self.optimizer.state[group['params'][0]] = stored_state
+
+        #         optimizable_tensors[group["name"]] = group["params"][0]
+        #     else:
+        #         group["params"][0] = nn.Parameter(group["params"][0][mask].requires_grad_(True))
+        #         optimizable_tensors[group["name"]] = group["params"][0]
+        # return optimizable_tensors
     # def _prune_anchor_optimizer(self, mask):
     #     optimizable_tensors = {}
     #     for group in self.optimizer.param_groups:
@@ -1209,8 +1240,10 @@ class GaussianModel:
             visible_mask = torch.ones(self.get_anchor.shape[0], dtype=torch.bool, device = self.get_anchor.device)
 
         anchor = self.get_anchor[visible_mask]
+        # anchor_full = self.get_anchor
         feat = self.get_anchor_feat[visible_mask]
         feat_semantic = self.get_anchor_feat_semantic[visible_mask]
+        # feat_semantic = self.get_anchor_feat_semantic
         grid_offsets = self.get_offset[visible_mask]
         grid_scaling = self.get_scaling[visible_mask]
 

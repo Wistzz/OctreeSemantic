@@ -327,10 +327,13 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 assign = True   # Reassign cluster centers
             else:
                 assign = False  #  update cluster centers
+            xyz, color, opacity, scaling, rot, semantic, sh_degree, selection_mask = gaussians.generate_neural_gaussians(viewpoint_cam)
+            gaussians._xyz = xyz
+            gaussians._ins_feat = semantic
             ins_feat_codebook.forward(gaussians, iteration, assign=assign, \
                                       mode=cb_mode, selected_leaf=root_id, \
                                       pos_weight=opt.pos_weight)   # note: position weight
-
+            
         # render function
         if iteration <= opt.start_ins_feat_iter:    # stage 0
             render_feat=False

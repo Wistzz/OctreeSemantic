@@ -46,7 +46,11 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     pc.set_anchor_mask(viewpoint_camera.camera_center, iteration, viewpoint_camera.resolution_scale)
     visible_mask = prefilter_voxel(viewpoint_camera, pc, pipe, bg_color).squeeze()
     # visible_mask = (torch.ones((pc._anchor.shape[0]))==1)
-    xyz, color, opacity, scaling, rot, semantic, sh_degree, selection_mask = pc.generate_neural_gaussians(viewpoint_camera, visible_mask, ape_code)
+    if render_feat_map==True:
+        xyz, color, opacity, scaling, rot, semantic, sh_degree, selection_mask = pc.generate_neural_gaussians(viewpoint_camera, visible_mask, ape_code)
+    else:
+        xyz, color, opacity, scaling, rot, semantic, sh_degree, selection_mask = pc.generate_neural_gaussians(viewpoint_camera)
+
     # Create zero tensor. We will use it to make pytorch return gradients of the 2D (screen-space) means
     screenspace_points = torch.zeros_like(xyz, dtype=xyz.dtype, requires_grad=True, device="cuda") + 0
     try:
@@ -142,7 +146,6 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
             scales = scales * rescale_factor,
             rotations = rotations,
             cov3D_precomp = cov3D_precomp)
-        breakpoint()
         # last three channels
         if ins_feat.shape[-1] > 3:
             rendered_ins_feat2, _, _, _ = rasterizer(
@@ -180,6 +183,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     viewed_pts = radii > 0      # ignore the invisible points
     if cluster_idx is not None:
         num_cluster = cluster_idx.max() + 1
+        # breakpoint()
         cluster_idx = cluster_idx[visible_mask]
         cluster_occur = torch.zeros(num_cluster).to(torch.bool) # [num_cluster], bool
     else:

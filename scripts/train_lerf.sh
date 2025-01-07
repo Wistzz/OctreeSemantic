@@ -90,14 +90,14 @@
 # # No need to set save_memory, 24G is sufficient.
 # ###############################################
 scan="ramen"
-gpu_num=1
+gpu_num=4
 echo "Training for ${scan} ....."
 CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 603$gpu_num \
     -s /data/sunwei/OpenGaussian/data/lerf_ovs/${scan} \
     --iterations 70_000 \
-    --start_ins_feat_iter 30_000 \
-    --start_root_cb_iter 40_000 \
-    --start_leaf_cb_iter 50_000 \
+    --start_ins_feat_iter 3 \
+    --start_root_cb_iter 10 \
+    --start_leaf_cb_iter 20 \
     --sam_level 3 \
     --root_node_num 64 \
     --leaf_node_num 10 \
