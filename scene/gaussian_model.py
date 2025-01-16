@@ -114,7 +114,6 @@ class GaussianModel:
         self.semantic_dim=6
         self.appearance_dim=0
         self.use_feat_bank=False
-
         if self.use_feat_bank:
             self.mlp_feature_bank = nn.Sequential(
                 nn.Linear(self.view_dim, self.feat_dim),
@@ -144,7 +143,7 @@ class GaussianModel:
         ).cuda()
 
         self.mlp_semantic = nn.Sequential(
-            nn.Linear(self.feat_dim+self.view_dim, self.feat_dim),
+            nn.Linear(self.feat_dim, self.feat_dim),
             nn.ReLU(True),
             nn.Linear(self.feat_dim, self.semantic_dim*self.n_offsets),
             nn.Sigmoid()
@@ -526,8 +525,8 @@ class GaussianModel:
             {'params': self.mlp_cov.parameters(), 'lr': training_args.mlp_cov_lr_init, "name": "mlp_cov"},
             {'params': self.mlp_color.parameters(), 'lr': training_args.mlp_color_lr_init, "name": "mlp_color"},
             {'params': self.mlp_semantic.parameters(), 'lr': training_args.mlp_semantic_lr_init, "name": "mlp_semantic"},
-            {'params': [self._scaling], 'lr': training_args.scaling_lr, "name": "scaling"},
-            {'params': [self._rotation], 'lr': training_args.rotation_lr, "name": "rotation"},
+            # {'params': [self._scaling], 'lr': training_args.scaling_lr, "name": "scaling"},
+            # {'params': [self._rotation], 'lr': training_args.rotation_lr, "name": "rotation"},
             # {'params': [self._ins_feat], 'lr': training_args.ins_feat_lr, "name": "ins_feat"}  # modify -----
         ]
         if self.appearance_dim > 0:
@@ -653,7 +652,7 @@ class GaussianModel:
         for i in range(self._anchor_feat.shape[1]):
             l.append('f_anchor_feat_{}'.format(i))
         for i in range(self._anchor_feat_semantic.shape[1]):
-            l.append('f_anchor_feat_semantic_{}'.format(i))
+            l.append('f_semantic_feat_{}'.format(i))
         # for i in range(self._features_dc.shape[1]*self._features_dc.shape[2]):
         #     l.append('f_dc_{}'.format(i))
         # for i in range(self._features_rest.shape[1]*self._features_rest.shape[2]):
@@ -663,6 +662,8 @@ class GaussianModel:
             l.append('scale_{}'.format(i))
         for i in range(self._rotation.shape[1]):
             l.append('rot_{}'.format(i))
+        for i in range(self._ins_feat_q.shape[1]):
+            l.append('ins_feat_{}'.format(i))
         # l+=['ins_feat_r', 'ins_feat_g', 'ins_feat_b', \
         #     'ins_feat_r2', 'ins_feat_g2', 'ins_feat_b2']
         return l
@@ -721,6 +722,7 @@ class GaussianModel:
         # opacities = self._opacity[level_mask].detach().cpu().numpy()
         scale = self._scaling[level_mask].detach().cpu().numpy()
         rotation = self._rotation[level_mask].detach().cpu().numpy()
+        ins_feat = self._ins_feat_q.detach().cpu().numpy()
         # ins_feat = self._ins_feat[level_mask].detach().cpu().numpy()
         dtype_full = [(attribute, 'f4') for attribute in self.construct_list_of_attributes()]
 
@@ -735,7 +737,7 @@ class GaussianModel:
         # dtype_full = dtype_full + [('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]  # modify
 
         elements = np.empty(anchor.shape[0], dtype=dtype_full)
-        attributes = np.concatenate((anchor, levels, extra_levels, offsets, anchor_feats, anchor_feats_semantic, scale, rotation), axis=1)
+        attributes = np.concatenate((anchor, levels, extra_levels, offsets, anchor_feats, anchor_feats_semantic, scale, rotation, ins_feat), axis=1)
         elements[:] = list(map(tuple, attributes))
         el = PlyElement.describe(elements, 'vertex')
 
@@ -761,6 +763,12 @@ class GaussianModel:
                         np.asarray(plydata.elements[0]["z"])),  axis=1)
         levels = np.asarray(plydata.elements[0]["level"])[... ,np.newaxis].astype(np.int16)
         extra_levels = np.asarray(plydata.elements[0]["extra_level"])[... ,np.newaxis].astype(np.float32)
+        ins_feat = np.stack((np.asarray(plydata.elements[0]["ins_feat_0"]),
+                        np.asarray(plydata.elements[0]["ins_feat_1"]),
+                        np.asarray(plydata.elements[0]["ins_feat_2"]),
+                        np.asarray(plydata.elements[0]["ins_feat_3"]),
+                        np.asarray(plydata.elements[0]["ins_feat_4"]),
+                        np.asarray(plydata.elements[0]["ins_feat_5"])),  axis=1)
         # offset_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("f_offset")]
         # offset_names = sorted(offset_names, key = lambda x: int(x.split('_')[-1]))
         # offsets = np.zeros((anchor.shape[0], len(offset_names)))
@@ -810,7 +818,7 @@ class GaussianModel:
         for idx, attr_name in enumerate(anchor_feat_names):
             anchor_feats[:, idx] = np.asarray(plydata.elements[0][attr_name]).astype(np.float32)
         
-        anchor_feat_semantic_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("f_anchor_feat_semantic")]
+        anchor_feat_semantic_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("f_semantic_feat")]
         anchor_feat_semantic_names = sorted(anchor_feat_semantic_names, key = lambda x: int(x.split('_')[-1]))
         anchor_feats_semantic = np.zeros((anchor.shape[0], len(anchor_feat_semantic_names)))
         for idx, attr_name in enumerate(anchor_feat_semantic_names):
@@ -825,8 +833,8 @@ class GaussianModel:
         
 
         self._anchor = nn.Parameter(torch.tensor(anchor, dtype=torch.float, device="cuda").requires_grad_(True))
-        self._anchor_feat == nn.Parameter(torch.tensor(anchor_feats, dtype=torch.float, device="cuda").requires_grad_(True))
-        self._anchor_feat_semantic == nn.Parameter(torch.tensor(anchor_feats_semantic, dtype=torch.float, device="cuda").requires_grad_(True))
+        self._anchor_feat = nn.Parameter(torch.tensor(anchor_feats, dtype=torch.float, device="cuda").requires_grad_(True))
+        self._anchor_feat_semantic = nn.Parameter(torch.tensor(anchor_feats_semantic, dtype=torch.float, device="cuda").requires_grad_(True))
         self._level = torch.tensor(levels, dtype=torch.int, device="cuda")
         self._extra_level = torch.tensor(extra_levels, dtype=torch.float, device="cuda").squeeze(dim=1)
         self._offset = nn.Parameter(torch.tensor(offsets, dtype=torch.float, device="cuda").transpose(1, 2).contiguous().requires_grad_(True))
@@ -836,6 +844,7 @@ class GaussianModel:
         self._scaling = nn.Parameter(torch.tensor(scales, dtype=torch.float, device="cuda").requires_grad_(True))
         self._rotation = nn.Parameter(torch.tensor(rots, dtype=torch.float, device="cuda").requires_grad_(True))
         self._anchor_mask = torch.ones(self._anchor.shape[0], dtype=torch.bool, device="cuda")
+        self._ins_feat = nn.Parameter(torch.tensor(ins_feat, dtype=torch.float, device="cuda").requires_grad_(True))
 
         self.active_sh_degree = self.max_sh_degree
         self.levels = round(self.levels)
@@ -964,8 +973,8 @@ class GaussianModel:
         self._offset = optimizable_tensors["offset"]
         self._anchor_feat = optimizable_tensors["anchor_feat"]
         self._anchor_feat_semantic = optimizable_tensors["anchor_feat_semantic"]
-        self._scaling = optimizable_tensors["scaling"]
-        self._rotation = optimizable_tensors["rotation"]
+        # self._scaling = optimizable_tensors["scaling"]
+        # self._rotation = optimizable_tensors["rotation"]
         self._level = self._level[valid_points_mask]
         self._extra_level = self._extra_level[valid_points_mask]
         # self.xyz_gradient_accum = self.xyz_gradient_accum[valid_points_mask]
@@ -1189,7 +1198,7 @@ class GaussianModel:
         cov_mlp.save(os.path.join(path, 'cov_mlp.pt'))
         color_mlp = torch.jit.trace(self.mlp_color, (torch.rand(1, self.feat_dim+self.view_dim+self.appearance_dim).cuda()))
         color_mlp.save(os.path.join(path, 'color_mlp.pt'))
-        semantic_mlp = torch.jit.trace(self.mlp_semantic, (torch.rand(1, self.feat_dim+self.view_dim).cuda()))
+        semantic_mlp = torch.jit.trace(self.mlp_semantic, (torch.rand(1, self.feat_dim).cuda()))
         semantic_mlp.save(os.path.join(path, 'semantic_mlp.pt'))
         if self.use_feat_bank:
             feature_bank_mlp = torch.jit.trace(self.mlp_feature_bank, (torch.rand(1, self.view_dim).cuda()))
@@ -1238,7 +1247,6 @@ class GaussianModel:
         # view frustum filtering for acceleration    
         if visible_mask is None:
             visible_mask = torch.ones(self.get_anchor.shape[0], dtype=torch.bool, device = self.get_anchor.device)
-
         anchor = self.get_anchor[visible_mask]
         # anchor_full = self.get_anchor
         feat = self.get_anchor_feat[visible_mask]
@@ -1246,7 +1254,6 @@ class GaussianModel:
         # feat_semantic = self.get_anchor_feat_semantic
         grid_offsets = self.get_offset[visible_mask]
         grid_scaling = self.get_scaling[visible_mask]
-
         # get view properties for anchor
         ob_view = anchor - viewpoint_camera.camera_center
         # dist
@@ -1290,7 +1297,9 @@ class GaussianModel:
         mask = mask.view(-1)
 
         # select opacity 
-        opacity = neural_opacity[mask]
+        opacity = neural_opacity.clone()
+        opacity[~mask] = 0.0
+        # opacity = neural_opacity[mask]
 
         # get offset's color
         if self.appearance_dim > 0:
@@ -1304,7 +1313,7 @@ class GaussianModel:
         scale_rot = scale_rot.reshape([anchor.shape[0]*self.n_offsets, 7]) # [mask]
         
         # get offset's semantic
-        semantic = self.get_semantic_mlp(cat_local_view_semantic)
+        semantic = self.get_semantic_mlp(feat_semantic)#(cat_local_view_semantic)
         semantic = semantic.reshape([anchor.shape[0]*self.n_offsets, self.semantic_dim])
         # offsets
         offsets = grid_offsets.view([-1, 3]) # [mask]
@@ -1313,7 +1322,7 @@ class GaussianModel:
         concatenated = torch.cat([grid_scaling, anchor], dim=-1)
         concatenated_repeated = repeat(concatenated, 'n (c) -> (n k) (c)', k=self.n_offsets)
         concatenated_all = torch.cat([concatenated_repeated, color, scale_rot, semantic, offsets], dim=-1)
-        masked = concatenated_all[mask]
+        masked = concatenated_all#[mask]
         scaling_repeat, repeat_anchor, color, scale_rot, semantic, offsets = masked.split([6, 3, 3, 7, self.semantic_dim, 3], dim=-1)
         
         # post-process cov
@@ -1323,7 +1332,6 @@ class GaussianModel:
         # post-process offsets to get centers for gaussians
         offsets = offsets * scaling_repeat[:,:3]
         xyz = repeat_anchor + offsets 
-        
         return xyz, color, opacity, scaling, rot, semantic, None, mask
 
     # def cat_tensors_to_optimizer(self, tensors_dict):

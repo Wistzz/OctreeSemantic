@@ -31,6 +31,7 @@ colors_defined[0] = np.array([0, 0, 0]) # Ignore the mask ID of -1 and set it to
 colors_defined = torch.from_numpy(colors_defined)
 
 def render_set(model_path, name, iteration, views, gaussians, pipeline, background, scene_name):
+    octree=False
     render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
 
@@ -61,10 +62,8 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
     leaf_ind = torch.from_numpy(saved_data["leaf_ind.npy"]).cuda()           # [num_pts] fine id
     leaf_lang_feat[leaf_occu_count < 5] *= 0.0      # Filter out clusters that occur too infrequently.
     leaf_cluster_indices = leaf_ind
-    
     root_num = root_cluster_indices.max() + 1
     leaf_num = leaf_lang_feat.shape[0] / root_num
-
     # text feature
     with open('assets/text_features.json', 'r') as f:
         data_loaded = json.load(f)
@@ -117,7 +116,6 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         leaf_lang_feat = F.normalize(leaf_lang_feat, dim=1, p=2)
         cosine_similarity = torch.matmul(text_feat, leaf_lang_feat.transpose(0, 1))
         max_id = torch.argmax(cosine_similarity, dim=-1) # [cluster_num]
-        # breakpoint()
         text_leaf_indices = max_id
 
         # from sklearn.cluster import KMeans
@@ -126,7 +124,6 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         # kmeans.fit(leaf_lang_feat_cpu)
         # labels = kmeans.labels_
         # valid_indices = np.where(labels != -1)[0]
-        # breakpoint()
         # from sklearn.cluster import DBSCAN
         # leaf_lang_feat_cpu = leaf_lang_feat.cpu().numpy()
         # # 初始化 DBSCAN 模型
@@ -160,7 +157,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
             if  view.image_name not in candidate_frames:
                 continue
 
-            render_pkg = render(view, gaussians, pipeline, background, iteration, rescale=False, training=False)
+            render_pkg = render(view, gaussians, pipeline, background, iteration, rescale=False, training=False, octree=octree)
             # RGB
             rendering = render_pkg["render"]
             gt = view.original_image[0:3, :, :]
@@ -186,7 +183,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
             mask_color_rand = mask_color_rand.permute(2, 0, 1)
             torchvision.utils.save_image(mask_color_rand/255.0, os.path.join(gt_sam_mask_path, '{0:05d}'.format(idx) + ".png"))
             
-            # render target object
+            # render target object           
             render_pkg = render(view, gaussians, pipeline, background, iteration,
                                 rescale=False,                #)  # wherther to re-scale the gaussian scale
                                 # cluster_idx=leaf_cluster_indices,     # root id
@@ -197,7 +194,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
                                 better_vis=True,
                                 seg_rgb=True,
                                 post_process=True,
-                                root_num=root_num, leaf_num=leaf_num, training=False)
+                                root_num=root_num, leaf_num=leaf_num, training=False, octree=octree)
             rendered_cluster_imgs = render_pkg["leaf_clusters_imgs"]
             occured_leaf_id = render_pkg["occured_leaf_id"]
             rendered_leaf_cluster_silhouettes = render_pkg["leaf_cluster_silhouettes"]
@@ -220,6 +217,7 @@ def render_sets(dataset : ModelParams, opt : OptimizationParams, iteration : int
     with torch.no_grad():
         gaussians = GaussianModel(dataset.sh_degree)
         scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
+        gaussians.eval()
         gaussians.set_coarse_interval(opt)
         # bg_color = [1,1,1] if dataset.white_background else [0, 0, 0]
         bg_color = [1,1,1]

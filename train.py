@@ -302,7 +302,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                                           cluster_indices=cluster_indices, mode=cb_mode,
                                           root_num=opt.root_node_num, leaf_num=opt.leaf_node_num,
                                           sam_level=opt.sam_level,
-                                          save_memory=opt.save_memory)
+                                          save_memory=opt.save_memory, octree=False)
                 if not viewpoint_cam.data_on_gpu:
                     viewpoint_cam.to_gpu()
                 if cb_mode == "leaf":
@@ -333,19 +333,21 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             ins_feat_codebook.forward(gaussians, iteration, assign=assign, \
                                       mode=cb_mode, selected_leaf=root_id, \
                                       pos_weight=opt.pos_weight)   # note: position weight
-            
         # render function
         if iteration <= opt.start_ins_feat_iter:    # stage 0
             render_feat=False
             render_cluster=False
             cluster_indices=None
+            octree=False
         elif iteration > opt.start_leaf_cb_iter:  # stage 2.2 (fine-level)
             render_feat=False   
             render_cluster=True
+            octree=False
         else:   # stage 1, stage 2.1(coarse-level)
             render_feat=True
             render_cluster=False
             cluster_indices=None
+            octree=False
         # rescale
 
         if iteration > opt.start_root_cb_iter:  # stage 2, rescale
@@ -358,6 +360,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                             cluster_idx=cluster_indices,    # coarse-level cluster id
                             leaf_cluster_idx=ins_feat_codebook.leaf_cls_ids,    # fine-level cluster id
                             render_feat_map=render_feat, 
+                            octree = octree,
                             render_cluster=render_cluster,
                             selected_root_id=root_id)       # coarse id (stage 2.2)
         # rendered results
@@ -392,11 +395,22 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         if iteration > opt.start_ins_feat_iter:
             # NOTE: Freeze the pre-trained Gaussian parameters and only train the instance features.
             scene.gaussians._anchor = scene.gaussians._anchor.detach()
-            scene.gaussians._features_dc = scene.gaussians._features_dc.detach()
-            scene.gaussians._features_rest = scene.gaussians._features_rest.detach()
-            scene.gaussians._opacity = scene.gaussians._opacity.detach()
-            scene.gaussians._scaling = scene.gaussians._scaling.detach()
-            scene.gaussians._rotation = scene.gaussians._rotation.detach()
+            scene.gaussians._offset = scene.gaussians._offset.detach()
+            scene.gaussians._anchor_feat = scene.gaussians._anchor_feat.detach()
+            # scene.gaussians._features_dc = scene.gaussians._features_dc.detach()
+            # scene.gaussians._features_rest = scene.gaussians._features_rest.detach()
+            # scene.gaussians._opacity = scene.gaussians._opacity.detach()
+            # scene.gaussians._scaling = scene.gaussians._scaling.detach()
+            # scene.gaussians._rotation = scene.gaussians._rotation.detach()
+            for param in scene.gaussians.mlp_opacity.parameters():
+                param.requires_grad = False
+                assert param.requires_grad is False, "Failed to freeze mlp_opacity parameters."
+            for param in scene.gaussians.mlp_cov.parameters():
+                param.requires_grad = False
+                assert param.requires_grad is False, "Failed to freeze mlp_cov parameters."
+            for param in scene.gaussians.mlp_color.parameters():
+                param.requires_grad = False
+                assert param.requires_grad is False, "Failed to freeze mlp_color parameters."
 
             # construct boolean masks [num_mask, H, W]
             # sam_level, leaf:3, scannet:0
@@ -475,7 +489,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         save_intermediate = True
         save_fre = 1000
         if iteration > opt.start_leaf_cb_iter:
-            save_fre = 100
+            save_fre = 500
         if (iteration % save_fre == 0) and save_intermediate:
             gts_path = os.path.join(scene.model_path, "train_process", "gt")
             makedirs(gts_path, exist_ok=True)
@@ -559,8 +573,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     if cb_mode == "leaf":
                         save_kmeans([ins_feat_codebook], ["ins_feat"], out_dir, mode="leaf")
                     scene.save(iteration, ["ins_feat"])
-                else:
-                    scene.save(iteration)
+                # else:
+                #     scene.save(iteration)
 
             # Densification
             if iteration < opt.update_until and \
@@ -603,7 +617,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                                           cluster_indices=leaf_cluster_indices, mode="lang",
                                           root_num=opt.root_node_num, leaf_num=opt.leaf_node_num,
                                           sam_level=opt.sam_level,
-                                          save_memory=opt.save_memory)
+                                          save_memory=opt.save_memory, octree=False)
         
         # note: save memory (only stage 2, 3)
         if viewpoint_cam.data_on_gpu and opt.save_memory and cb_mode is not None:
@@ -637,7 +651,7 @@ def construct_pseudo_ins_feat(scene : Scene, renderFunc, renderArgs,
                             mode="root",            # root, leaf, lang
                             root_num=64, leaf_num=10,   # k1, k2
                             sam_level=3,
-                            save_memory=False):
+                            save_memory=False, octree=False):
     torch.cuda.empty_cache()
     # ##############################################################################################
     # [Stage 2.1, 2.2] Render all training views once to construct pseudo-instance feature labels. #
@@ -729,7 +743,7 @@ def construct_pseudo_ins_feat(scene : Scene, renderFunc, renderArgs,
                 view.to_gpu()
             render_pkg = renderFunc(view, scene.gaussians, *renderArgs, cluster_idx=cluster_indices, rescale=False,\
                                     render_feat_map=False, render_cluster=True, origin_feat=True, better_vis=True,
-                                    root_num=root_num, leaf_num=leaf_num)
+                                    root_num=root_num, leaf_num=leaf_num, octree=octree)
             rendered_cluster_imgs = render_pkg["cluster_imgs"]  # coarse cluster feature map
             rendered_cluster_silhouettes = render_pkg["cluster_silhouettes"] # coarse cluster mask
             cluster_occur = render_pkg["cluster_occur"] # bool [k1] Whether coarse clusters visible in the current view
@@ -825,7 +839,7 @@ def construct_pseudo_ins_feat(scene : Scene, renderFunc, renderArgs,
                 render_pkg = renderFunc(view, scene.gaussians, *renderArgs, leaf_cluster_idx=cluster_indices, rescale=False,\
                                         render_feat_map=False, render_cluster=True, origin_feat=True, better_vis=False,\
                                         selected_root_id=root_id,\
-                                        root_num=root_num, leaf_num=leaf_num)
+                                        root_num=root_num, leaf_num=leaf_num, octree=octree)
                 rendered_leaf_cluster_imgs = render_pkg["leaf_clusters_imgs"]   # all fine-level clusters of the root_id-th coarse-level.
                 rendered_leaf_cluster_silhouettes = render_pkg["leaf_cluster_silhouettes"]
                 occured_leaf_id = render_pkg["occured_leaf_id"]
