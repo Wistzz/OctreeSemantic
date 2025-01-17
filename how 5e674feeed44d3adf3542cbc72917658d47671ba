@@ -1,0 +1,41 @@
+[33mcommit 5e674feeed44d3adf3542cbc72917658d47671ba[m[33m ([m[1;36mHEAD -> [m[1;32mleaf_scaffold[m[33m)[m
+Author: Wistzz <sunwei162@mails.ucas.ac.cn>
+Date:   Thu Jan 16 16:10:39 2025 +0800
+
+    leaf_scaffold, kmeans based on all gaussians
+
+[33mcommit d4f6a176d904f0dd2097fc0ac3e0f604ca4962b0[m[33m ([m[1;31morigin/scaffold[m[33m, [m[1;32mscaffold[m[33m)[m
+Author: Wistzz <sunwei162@mails.ucas.ac.cn>
+Date:   Tue Jan 7 16:22:57 2025 +0800
+
+    scaffold done, kmeans_quantize to fix
+
+[33mcommit e651f24fe74287129c44069bf3bee1c41de8c020[m
+Author: Wistzz <sunwei162@mails.ucas.ac.cn>
+Date:   Mon Jan 6 18:16:20 2025 +0800
+
+    scaffold semantic
+
+[33mcommit b113ddb62d58a03046b4ef83e458e409e134bd95[m[33m ([m[1;31morigin/octree[m[33m, [m[1;32moctree[m[33m)[m
+Author: Will <sunwei162@mails.ucas.ac.cn>
+Date:   Mon Jan 6 15:22:37 2025 +0800
+
+    feat:Octree
+
+[33mcommit 1539cce96d90acb5ff980203cddc35070bf68afd[m
+Author: Will <sunwei162@mails.ucas.ac.cn>
+Date:   Fri Jan 3 17:30:26 2025 +0800
+
+    3dgs version of octree-semantic
+
+[33mcommit 6213a06a40b503fde7bc7056b4383acaa2b07e45[m
+Author: Will <sunwei162@mails.ucas.ac.cn>
+Date:   Wed Dec 25 13:52:21 2024 +0800
+
+    trying to add octree-3dgs
+
+[33mcommit 28f364e80323a5985628091f4a1d2505eadf713c[m[33m ([m[1;31morigin/master[m[33m, [m[1;32mmaster[m[33m)[m
+Author: Will <sunwei162@mails.ucas.ac.cn>
+Date:   Tue Dec 24 14:30:56 2024 +0800
+
+    Initial commit

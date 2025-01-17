@@ -13,22 +13,22 @@ conda activate opengs
 # --pos_weight 0.5
 # --save_memory: Saves memory, but will reduce training speed. If your GPU memory > 24GB, you can omit this flag
 ###############################################
-# scan="figurines"
-# gpu_num=4           # change
-# echo "Training for ${scan} ....."
-# CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 662$gpu_num \
-#     -s /data/sunwei/OpenGaussian/data/lerf_ovs/${scan} \
-#     --iterations 70_000 \
-#     --start_ins_feat_iter 30_000 \
-#     --start_root_cb_iter 40_000 \
-#     --start_leaf_cb_iter 50_000 \
-#     --sam_level 3 \
-#     --root_node_num 64 \
-#     --leaf_node_num 10 \
-#     --pos_weight 0.5 \
-#     --save_memory \
-#     --test_iterations 30000 \
-#     --eval
+scan="figurines"
+gpu_num=3           # change
+echo "Training for ${scan} ....."
+CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 662$gpu_num \
+    -s /data/sunwei/OpenGaussian/data/lerf_ovs/${scan} \
+    --iterations 70_000 \
+    --start_ins_feat_iter 30_000 \
+    --start_root_cb_iter 40_000 \
+    --start_leaf_cb_iter 50_000 \
+    --sam_level 3 \
+    --root_node_num 64 \
+    --leaf_node_num 10 \
+    --pos_weight 0.5 \
+    --save_memory \
+    --test_iterations 30000 \
+    --eval
 
 
 # # ###############################################
@@ -90,22 +90,22 @@ conda activate opengs
 # # --loss_weight 0.01: the weight of intra-mask smooth loss. 0.1 is used for the other scenes.
 # # No need to set save_memory, 24G is sufficient.
 # ###############################################
-scan="ramen"
-gpu_num=1
-echo "Training for ${scan} ....."
-CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 512$gpu_num \
-    -s /data/sunwei/OpenGaussian/data/lerf_ovs/${scan} \
-    --iterations 70_0 \
-    --start_ins_feat_iter 30_0 \
-    --start_root_cb_iter 40_0 \
-    --start_leaf_cb_iter 50_0 \
-    --sam_level 3 \
-    --root_node_num 64 \
-    --leaf_node_num 10 \
-    --pos_weight 0.5 \
-    --loss_weight 0.01 \
-    --test_iterations 30000 \
-    --eval
+# scan="ramen"
+# gpu_num=7
+# echo "Training for ${scan} ....."
+# CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 512$gpu_num \
+#     -s /data/sunwei/OpenGaussian/data/lerf_ovs/${scan} \
+#     --iterations 70_000 \
+#     --start_ins_feat_iter 30_000 \
+#     --start_root_cb_iter 40_000 \
+#     --start_leaf_cb_iter 50_000 \
+#     --sam_level 3 \
+#     --root_node_num 64 \
+#     --leaf_node_num 10 \
+#     --pos_weight 0.5 \
+#     --loss_weight 0.01 \
+#     --test_iterations 30000 \
+#     --eval
 
 
 # scan="ramen"

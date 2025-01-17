@@ -20,7 +20,7 @@ from utils.sh_utils import RGB2SH
 # from simple_knn._C import distCUDA2   # no need
 from scipy.spatial import KDTree        # modify
 from utils.graphics_utils import BasicPointCloud
-from utils.general_utils import strip_symmetric, build_scaling_rotation, knn
+from utils.general_utils import strip_symmetric, build_scaling_rotation, knn, reduce
 from torch_scatter import scatter_max
 from einops import repeat
 import time
@@ -525,8 +525,8 @@ class GaussianModel:
             {'params': self.mlp_cov.parameters(), 'lr': training_args.mlp_cov_lr_init, "name": "mlp_cov"},
             {'params': self.mlp_color.parameters(), 'lr': training_args.mlp_color_lr_init, "name": "mlp_color"},
             {'params': self.mlp_semantic.parameters(), 'lr': training_args.mlp_semantic_lr_init, "name": "mlp_semantic"},
-            # {'params': [self._scaling], 'lr': training_args.scaling_lr, "name": "scaling"},
-            # {'params': [self._rotation], 'lr': training_args.rotation_lr, "name": "rotation"},
+            {'params': [self._scaling], 'lr': training_args.scaling_lr, "name": "scaling"},
+            {'params': [self._rotation], 'lr': training_args.rotation_lr, "name": "rotation"},
             # {'params': [self._ins_feat], 'lr': training_args.ins_feat_lr, "name": "ins_feat"}  # modify -----
         ]
         if self.appearance_dim > 0:
@@ -668,39 +668,7 @@ class GaussianModel:
         #     'ins_feat_r2', 'ins_feat_g2', 'ins_feat_b2']
         return l
     
-    # def save_ply(self, path, save_q=[]):
-    #     mkdir_p(os.path.dirname(path))
 
-    #     xyz = self._xyz.detach().cpu().numpy()
-    #     normals = np.zeros_like(xyz)
-    #     f_dc = self._features_dc.detach().transpose(1, 2).flatten(start_dim=1).contiguous().cpu().numpy()
-    #     f_rest = self._features_rest.detach().transpose(1, 2).flatten(start_dim=1).contiguous().cpu().numpy()
-    #     opacities = self._opacity.detach().cpu().numpy()
-    #     scale = self._scaling.detach().cpu().numpy()
-    #     rotation = self._rotation.detach().cpu().numpy()
-    #     if "ins_feat" in save_q:
-    #         ins_feat = self._ins_feat_q.detach().cpu().numpy()
-    #     else:
-    #         ins_feat = self._ins_feat.detach().cpu().numpy()
-
-    #     # NOTE: pts feat visualization
-    #     vis_color = (ins_feat + 1) / 2 * 255
-    #     r, g, b = vis_color[:, 0].reshape(-1, 1), vis_color[:, 1].reshape(-1, 1), vis_color[:, 2].reshape(-1, 1)
-
-    #     # todo: points not fully optimized due to sampled training images.
-    #     ignored_ind = sigmoid(opacities) < 0.1
-    #     r[ignored_ind], g[ignored_ind], b[ignored_ind] = 128, 128, 128
-
-    #     dtype_full = [(attribute, 'f4') for attribute in self.construct_list_of_attributes()]
-    #     dtype_full = dtype_full + [('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]  # modify
-
-    #     elements = np.empty(xyz.shape[0], dtype=dtype_full)
-    #     attributes = np.concatenate((xyz, normals, ins_feat,\
-    #                                 f_dc, f_rest, opacities, scale, rotation,\
-    #                                 r, g, b), axis=1)
-    #     elements[:] = list(map(tuple, attributes))
-    #     el = PlyElement.describe(elements, 'vertex')
-    #     PlyData([el]).write(path)
     def save_ply(self, path, iteration):
         mkdir_p(os.path.dirname(path))
 
@@ -722,7 +690,7 @@ class GaussianModel:
         # opacities = self._opacity[level_mask].detach().cpu().numpy()
         scale = self._scaling[level_mask].detach().cpu().numpy()
         rotation = self._rotation[level_mask].detach().cpu().numpy()
-        ins_feat = self._ins_feat_q.detach().cpu().numpy()
+        ins_feat = self._ins_feat_q[level_mask].detach().cpu().numpy()
         # ins_feat = self._ins_feat[level_mask].detach().cpu().numpy()
         dtype_full = [(attribute, 'f4') for attribute in self.construct_list_of_attributes()]
 
@@ -763,12 +731,6 @@ class GaussianModel:
                         np.asarray(plydata.elements[0]["z"])),  axis=1)
         levels = np.asarray(plydata.elements[0]["level"])[... ,np.newaxis].astype(np.int16)
         extra_levels = np.asarray(plydata.elements[0]["extra_level"])[... ,np.newaxis].astype(np.float32)
-        ins_feat = np.stack((np.asarray(plydata.elements[0]["ins_feat_0"]),
-                        np.asarray(plydata.elements[0]["ins_feat_1"]),
-                        np.asarray(plydata.elements[0]["ins_feat_2"]),
-                        np.asarray(plydata.elements[0]["ins_feat_3"]),
-                        np.asarray(plydata.elements[0]["ins_feat_4"]),
-                        np.asarray(plydata.elements[0]["ins_feat_5"])),  axis=1)
         # offset_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("f_offset")]
         # offset_names = sorted(offset_names, key = lambda x: int(x.split('_')[-1]))
         # offsets = np.zeros((anchor.shape[0], len(offset_names)))
@@ -824,6 +786,12 @@ class GaussianModel:
         for idx, attr_name in enumerate(anchor_feat_semantic_names):
             anchor_feats_semantic[:, idx] = np.asarray(plydata.elements[0][attr_name]).astype(np.float32)
 
+        ins_feat_q_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("f_semantic_feat")]
+        ins_feat_q_names = sorted(ins_feat_q_names, key = lambda x: int(x.split('_')[-1]))
+        ins_feat_q = np.zeros((anchor.shape[0], len(ins_feat_q_names)))
+        for idx, attr_name in enumerate(ins_feat_q_names):
+            ins_feat_q[:, idx] = np.asarray(plydata.elements[0][attr_name]).astype(np.float32)
+
         offset_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("f_offset")]
         offset_names = sorted(offset_names, key = lambda x: int(x.split('_')[-1]))
         offsets = np.zeros((anchor.shape[0], len(offset_names)))
@@ -844,7 +812,7 @@ class GaussianModel:
         self._scaling = nn.Parameter(torch.tensor(scales, dtype=torch.float, device="cuda").requires_grad_(True))
         self._rotation = nn.Parameter(torch.tensor(rots, dtype=torch.float, device="cuda").requires_grad_(True))
         self._anchor_mask = torch.ones(self._anchor.shape[0], dtype=torch.bool, device="cuda")
-        self._ins_feat = nn.Parameter(torch.tensor(ins_feat, dtype=torch.float, device="cuda").requires_grad_(True))
+        self._ins_feat_q = nn.Parameter(torch.tensor(ins_feat_q, dtype=torch.float, device="cuda").requires_grad_(True))
 
         self.active_sh_degree = self.max_sh_degree
         self.levels = round(self.levels)
@@ -973,8 +941,8 @@ class GaussianModel:
         self._offset = optimizable_tensors["offset"]
         self._anchor_feat = optimizable_tensors["anchor_feat"]
         self._anchor_feat_semantic = optimizable_tensors["anchor_feat_semantic"]
-        # self._scaling = optimizable_tensors["scaling"]
-        # self._rotation = optimizable_tensors["rotation"]
+        self._scaling = optimizable_tensors["scaling"]
+        self._rotation = optimizable_tensors["rotation"]
         self._level = self._level[valid_points_mask]
         self._extra_level = self._extra_level[valid_points_mask]
         # self.xyz_gradient_accum = self.xyz_gradient_accum[valid_points_mask]
@@ -1135,6 +1103,44 @@ class GaussianModel:
                 self._level = torch.cat([self._level, new_level], dim=0)
                 self._extra_level = torch.cat([self._extra_level, new_extra_level], dim=0)
     
+    def cat_tensors_to_optimizer(self, tensors_dict):
+        optimizable_tensors = {}
+        for group in self.optimizer.param_groups:
+            if  'mlp' in group['name'] or \
+                'conv' in group['name'] or \
+                'embedding' in group['name']:
+                continue
+            assert len(group["params"]) == 1
+            extension_tensor = tensors_dict[group["name"]]
+            stored_state = self.optimizer.state.get(group['params'][0], None)
+            if stored_state is not None:
+                stored_state["exp_avg"] = torch.cat((stored_state["exp_avg"], torch.zeros_like(extension_tensor)), dim=0)
+                stored_state["exp_avg_sq"] = torch.cat((stored_state["exp_avg_sq"], torch.zeros_like(extension_tensor)), dim=0)
+
+                del self.optimizer.state[group['params'][0]]
+                group["params"][0] = nn.Parameter(torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
+                self.optimizer.state[group['params'][0]] = stored_state
+
+                optimizable_tensors[group["name"]] = group["params"][0]
+            else:
+                group["params"][0] = nn.Parameter(torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
+                optimizable_tensors[group["name"]] = group["params"][0]
+
+        return optimizable_tensors
+    
+    def get_remove_duplicates(self, grid_coords, selected_grid_coords_unique, use_chunk = True):
+        if use_chunk:
+            chunk_size = 4096
+            max_iters = grid_coords.shape[0] // chunk_size + (1 if grid_coords.shape[0] % chunk_size != 0 else 0)
+            remove_duplicates_list = []
+            for i in range(max_iters):
+                cur_remove_duplicates = (selected_grid_coords_unique.unsqueeze(1) == grid_coords[i*chunk_size:(i+1)*chunk_size, :]).all(-1).any(-1).view(-1)
+                remove_duplicates_list.append(cur_remove_duplicates)
+            remove_duplicates = reduce(torch.logical_or, remove_duplicates_list)
+        else:
+            remove_duplicates = (selected_grid_coords_unique.unsqueeze(1) == grid_coords).all(-1).any(-1).view(-1)
+        return remove_duplicates
+    
     def run_densify(self, iteration, opt):
         # adding anchors
         grads = self.offset_gradient_accum / self.offset_denom # [N*k, 1]
@@ -1243,14 +1249,17 @@ class GaussianModel:
     #     mask = torch.ones(xyz.shape[0], dtype=torch.bool, device="cuda")
 
     #     return xyz, color, opacity, scaling, rotation, self.active_sh_degree, mask
-    def generate_neural_gaussians(self, viewpoint_camera, visible_mask=None, ape_code=-1):
+    def generate_neural_gaussians(self, viewpoint_camera, visible_mask=None, ape_code=-1, ins_feat_q=False):
         # view frustum filtering for acceleration    
         if visible_mask is None:
             visible_mask = torch.ones(self.get_anchor.shape[0], dtype=torch.bool, device = self.get_anchor.device)
         anchor = self.get_anchor[visible_mask]
         # anchor_full = self.get_anchor
         feat = self.get_anchor_feat[visible_mask]
-        feat_semantic = self.get_anchor_feat_semantic[visible_mask]
+        if ins_feat_q == True:
+            feat_semantic = self._ins_feat_q[visible_mask]
+        else:
+            feat_semantic = self.get_anchor_feat_semantic[visible_mask]
         # feat_semantic = self.get_anchor_feat_semantic
         grid_offsets = self.get_offset[visible_mask]
         grid_scaling = self.get_scaling[visible_mask]
@@ -1297,9 +1306,9 @@ class GaussianModel:
         mask = mask.view(-1)
 
         # select opacity 
-        opacity = neural_opacity.clone()
-        opacity[~mask] = 0.0
-        # opacity = neural_opacity[mask]
+        # opacity = neural_opacity.clone()
+        # opacity[~mask] = 0.0
+        opacity = neural_opacity[mask]
 
         # get offset's color
         if self.appearance_dim > 0:
@@ -1322,7 +1331,7 @@ class GaussianModel:
         concatenated = torch.cat([grid_scaling, anchor], dim=-1)
         concatenated_repeated = repeat(concatenated, 'n (c) -> (n k) (c)', k=self.n_offsets)
         concatenated_all = torch.cat([concatenated_repeated, color, scale_rot, semantic, offsets], dim=-1)
-        masked = concatenated_all#[mask]
+        masked = concatenated_all[mask]
         scaling_repeat, repeat_anchor, color, scale_rot, semantic, offsets = masked.split([6, 3, 3, 7, self.semantic_dim, 3], dim=-1)
         
         # post-process cov
@@ -1334,27 +1343,37 @@ class GaussianModel:
         xyz = repeat_anchor + offsets 
         return xyz, color, opacity, scaling, rot, semantic, None, mask
 
-    # def cat_tensors_to_optimizer(self, tensors_dict):
-    #     optimizable_tensors = {}
-    #     for group in self.optimizer.param_groups:
-    #         assert len(group["params"]) == 1
-    #         extension_tensor = tensors_dict[group["name"]]
-    #         stored_state = self.optimizer.state.get(group['params'][0], None)
-    #         if stored_state is not None:
+       # statis grad information to guide liftting. 
+    def training_statis(self, render_pkg, width, height):
+        viewspace_point_tensor = render_pkg["viewspace_points"]
+        update_filter = render_pkg["visibility_filter"]
+        anchor_visible_mask = render_pkg["visible_mask"]
+        offset_selection_mask = render_pkg["selection_mask"] 
+        opacity = render_pkg["opacity"]
+        # update opacity stats
+        
+        temp_opacity = torch.zeros(offset_selection_mask.shape[0], dtype=torch.float32, device="cuda")
+        temp_opacity[offset_selection_mask] = opacity.clone().view(-1).detach()
+        
+        temp_opacity = temp_opacity.view([-1, self.n_offsets])
+        self.opacity_accum[anchor_visible_mask] += temp_opacity.sum(dim=1, keepdim=True)
+        
+        # update anchor visiting statis
+        self.anchor_demon[anchor_visible_mask] += 1
 
-    #             stored_state["exp_avg"] = torch.cat((stored_state["exp_avg"], torch.zeros_like(extension_tensor)), dim=0)
-    #             stored_state["exp_avg_sq"] = torch.cat((stored_state["exp_avg_sq"], torch.zeros_like(extension_tensor)), dim=0)
-
-    #             del self.optimizer.state[group['params'][0]]
-    #             group["params"][0] = nn.Parameter(torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
-    #             self.optimizer.state[group['params'][0]] = stored_state
-
-    #             optimizable_tensors[group["name"]] = group["params"][0]
-    #         else:
-    #             group["params"][0] = nn.Parameter(torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
-    #             optimizable_tensors[group["name"]] = group["params"][0]
-
-    #     return optimizable_tensors
+        # update neural gaussian statis
+        anchor_visible_mask = anchor_visible_mask.unsqueeze(dim=1).repeat([1, self.n_offsets]).view(-1)
+        combined_mask = torch.zeros_like(self.offset_gradient_accum, dtype=torch.bool).squeeze(dim=1)
+        combined_mask[anchor_visible_mask] = offset_selection_mask
+        temp_mask = combined_mask.clone()
+        combined_mask[temp_mask] = update_filter
+        
+        grad = viewspace_point_tensor.grad.squeeze(0) # [N, 2]
+        grad[:, 0] *= width * 0.5
+        grad[:, 1] *= height * 0.5
+        grad_norm = torch.norm(grad[update_filter,:2], dim=-1, keepdim=True)
+        self.offset_gradient_accum[combined_mask] += grad_norm
+        self.offset_denom[combined_mask] += 1
 
     # def densification_postfix(self, new_xyz, new_features_dc, new_features_rest, new_opacities, \
     #                             new_scaling, new_rotation, new_ins_feat):

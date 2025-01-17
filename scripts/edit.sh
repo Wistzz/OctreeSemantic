@@ -1,2 +1,2 @@
-export CUDA_VISIBLE_DEVICES=3
-python render_lerf_by_text.py -m "./output/1e8c1d54-d" --scene_name "ramen"
+export CUDA_VISIBLE_DEVICES=1
+python render_lerf_by_text.py -m "./output/6d8c52a0-e" --scene_name "figurines"

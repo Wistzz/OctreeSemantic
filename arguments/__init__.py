@@ -110,12 +110,13 @@ class OptimizationParams(ParamGroup):
         self.update_ratio = 0.2
         self.extra_ratio = 0.25
         self.extra_up = 0.02
-        self.overlap = True
+        self.overlap = False
         self.min_opacity = 0.005
         #-----------------------------
         # self.opacity_reset_interval = 3000
-        self.update_from = 1_500
+        self.update_from = 1500
         self.update_until = 25_000
+        self.start_stat = 500
         self.densify_grad_threshold = 0.0002
         self.random_background = False
         self.coarse_factor=1.5

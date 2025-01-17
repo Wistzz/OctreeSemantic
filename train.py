@@ -327,9 +327,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 assign = True   # Reassign cluster centers
             else:
                 assign = False  #  update cluster centers
-            xyz, color, opacity, scaling, rot, semantic, sh_degree, selection_mask = gaussians.generate_neural_gaussians(viewpoint_cam)
-            gaussians._xyz = xyz
-            gaussians._ins_feat = semantic
+            # xyz, color, opacity, scaling, rot, semantic, sh_degree, selection_mask = gaussians.generate_neural_gaussians(viewpoint_cam)
+            gaussians._xyz = gaussians._anchor
+            gaussians._ins_feat = gaussians._anchor_feat_semantic
             ins_feat_codebook.forward(gaussians, iteration, assign=assign, \
                                       mode=cb_mode, selected_leaf=root_id, \
                                       pos_weight=opt.pos_weight)   # note: position weight
@@ -362,7 +362,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                             render_feat_map=render_feat, 
                             octree = octree,
                             render_cluster=render_cluster,
-                            selected_root_id=root_id)       # coarse id (stage 2.2)
+                            selected_root_id=root_id, cb_mode=cb_mode)       # coarse id (stage 2.2)
         # rendered results
         image, viewspace_point_tensor, visibility_filter, radii = \
             render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
@@ -373,6 +373,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         rendered_cluster_imgs = render_pkg["cluster_imgs"]  # [num_cl, 6, H, W]
         rendered_leaf_cluster_imgs = render_pkg["leaf_clusters_imgs"]
         rendered_cluster_silhouettes = render_pkg["cluster_silhouettes"]
+        opacity = render_pkg['opacity']
         if render_cluster:
             if rendered_cluster_silhouettes is not None and len(rendered_cluster_silhouettes) > 0:
                 rendered_cluster_silhouettes = rendered_cluster_silhouettes > 0.7
@@ -480,7 +481,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             #             grad_full = torch.zeros_like(param.grad)
             #             grad_full[mask] = grad_selected
             #             param.grad = grad_full
-            #             breakpoint()
             loss.backward()
 
         iter_end.record()
@@ -576,22 +576,19 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 # else:
                 #     scene.save(iteration)
 
-            # Densification
-            if iteration < opt.update_until and \
-                not opt.frozen_init_pts: # note: ScanNet dataset is not densified [OpenGaussian]
-                # Keep track of max radii in image-space for pruning
-                # gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
-                # gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
+            # # Densification
+            # if iteration < opt.update_until and \
+            #     not opt.frozen_init_pts:
+            #     if iteration > opt.update_from and iteration % opt.update_interval == 0:
+            #         gaussians.run_densify(iteration, opt)
 
-
+            # # borrow from octree-gs
+            if iteration < opt.update_until and iteration > opt.start_stat:
+                # add statis
+                gaussians.training_statis(render_pkg, image.shape[2], image.shape[1])
+                # densification
                 if iteration > opt.update_from and iteration % opt.update_interval == 0:
                     gaussians.run_densify(iteration, opt)
-                # if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
-                #     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
-                #     gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
-
-                # if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
-                #     gaussians.reset_opacity()
 
             # Optimizer step
             if iteration < opt.iterations:

@@ -194,7 +194,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
                                 better_vis=True,
                                 seg_rgb=True,
                                 post_process=True,
-                                root_num=root_num, leaf_num=leaf_num, training=False, octree=octree)
+                                root_num=root_num, leaf_num=leaf_num, training=False, octree=octree, cb_mode='render')
             rendered_cluster_imgs = render_pkg["leaf_clusters_imgs"]
             occured_leaf_id = render_pkg["occured_leaf_id"]
             rendered_leaf_cluster_silhouettes = render_pkg["leaf_cluster_silhouettes"]
