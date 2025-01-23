@@ -194,7 +194,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
                                 better_vis=True,
                                 seg_rgb=True,
                                 post_process=True,
-                                root_num=root_num, leaf_num=leaf_num, training=False, octree=octree, cb_mode='render')
+                                root_num=root_num, leaf_num=leaf_num, training=False, octree=octree)
             rendered_cluster_imgs = render_pkg["leaf_clusters_imgs"]
             occured_leaf_id = render_pkg["occured_leaf_id"]
             rendered_leaf_cluster_silhouettes = render_pkg["leaf_cluster_silhouettes"]
@@ -215,10 +215,10 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
 def render_sets(dataset : ModelParams, opt : OptimizationParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool,
                 scene_name: str):
     with torch.no_grad():
-        gaussians = GaussianModel(dataset.sh_degree)
+        gaussians = GaussianModel(dataset.sh_degree, opt)
         scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
         gaussians.eval()
-        gaussians.set_coarse_interval(opt)
+        # gaussians.set_coarse_interval(opt)
         # bg_color = [1,1,1] if dataset.white_background else [0, 0, 0]
         bg_color = [1,1,1]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")

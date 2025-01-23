@@ -36,31 +36,37 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
             pre_mask=None,
             seg_rgb=False,          # render cluster rgb, not feat
             post_process=False,     # post
-            root_num=64, leaf_num=10, ape_code=-1, training=True, octree=False, cb_mode=None):  # k1, k2 
+            root_num=64, leaf_num=10, ape_code=-1, training=True, octree=False, cb_mode=None, retain_grad=False):  # k1, k2 
     """
     Render the scene. 
     
     Background tensor (bg_color) must be on GPU!
     """
     # if training == True:
-    
     if origin_feat==False and cb_mode!=None:
         visible_mask = (torch.ones((pc._anchor.shape[0]))==1)
-        xyz, color, opacity, scaling, rot, semantic, sh_degree, selection_mask = pc.generate_neural_gaussians(viewpoint_camera, ins_feat_q=True)
+        xyz, color, opacity, scaling, rot, semantic, sh_degree, selection_mask, neural_opacity = pc.generate_neural_gaussians(viewpoint_camera, ins_feat_q=True)
     elif octree==True:
         pc.set_anchor_mask(viewpoint_camera.camera_center, iteration, viewpoint_camera.resolution_scale)
         visible_mask = prefilter_voxel(viewpoint_camera, pc, pipe, bg_color).squeeze()
-        xyz, color, opacity, scaling, rot, semantic, sh_degree, selection_mask = pc.generate_neural_gaussians(viewpoint_camera, visible_mask, ape_code)
+        xyz, color, opacity, scaling, rot, semantic, sh_degree, selection_mask, neural_opacity = pc.generate_neural_gaussians(viewpoint_camera, visible_mask, ape_code)
     else:
         visible_mask = (torch.ones((pc._anchor.shape[0]))==1)
-        xyz, color, opacity, scaling, rot, semantic, sh_degree, selection_mask = pc.generate_neural_gaussians(viewpoint_camera)
-    ins_feat = semantic
+        xyz, color, opacity, scaling, rot, semantic, sh_degree, selection_mask, neural_opacity = pc.generate_neural_gaussians(viewpoint_camera)
+    
+    # ins_feat = semantic
+    ins_feat = (semantic + 1) / 2
     # Create zero tensor. We will use it to make pytorch return gradients of the 2D (screen-space) means
     screenspace_points = torch.zeros_like(xyz, dtype=xyz.dtype, requires_grad=True, device="cuda") + 0
-    try:
-        screenspace_points.retain_grad()
-    except:
-        pass
+    if retain_grad:
+        try:
+            screenspace_points.retain_grad()
+        except:
+            pass
+    # try:
+    #     screenspace_points.retain_grad()
+    # except:
+    #     pass
 
     # Set up rasterization configuration
     tanfovx = math.tan(viewpoint_camera.FoVx * 0.5)
@@ -139,7 +145,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
         # get feature
         # ins_feat = (pc.get_ins_feat(origin=origin_feat) + 1) / 2   # pseudo -> norm, else -> raw
         # ins_feat = ins_feat[visible_mask]
-        ins_feat = semantic
+        # ins_feat = semantic
         # if origin_feat==False and rescale==True:
         #     ins_feat = pc._ins_feat_q
         # first three channels
@@ -189,7 +195,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     viewed_pts = radii > 0      # ignore the invisible points
     if cluster_idx is not None:
         num_cluster = cluster_idx.max() + 1
-        cluster_idx = cluster_idx[visible_mask]
+        cluster_idx = cluster_idx#[visible_mask]
         # cluster_idx = cluster_idx[visible_mask]
         cluster_occur = torch.zeros(num_cluster).to(torch.bool) # [num_cluster], bool
     else:
@@ -211,7 +217,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
             
             # NOTE: Render only the idx-th coarse cluster
             filter_idx = cluster_idx == idx
-            filter_idx = torch.repeat_interleave(filter_idx, 10)
+            filter_idx = filter_idx[selection_mask]
             filter_idx = filter_idx & viewed_pts
             # todo: filter
             if better_vis:
@@ -262,7 +268,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     #   - occured_leaf_id: visible fine cluster id                  #
     # ###############################################################
     if leaf_cluster_idx is not None and leaf_cluster_idx.numel() > 0:
-        leaf_cluster_idx = leaf_cluster_idx[visible_mask]
+        leaf_cluster_idx = leaf_cluster_idx#[visible_mask]
         # leaf_cluster_idx = leaf_cluster_idx[visible_mask]
         # ins_feat = (pc.get_ins_feat(origin=origin_feat) + 1) / 2   # pseudo -> norm, else -> raw
         # ins_feat = ins_feat[visible_mask]
@@ -298,7 +304,8 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
             else:
                 filter_idx = (leaf_cluster_idx.unsqueeze(1) == selected_leaf_id).any(dim=1)
 
-            filter_idx = torch.repeat_interleave(filter_idx, 10)
+            # filter_idx = torch.repeat_interleave(filter_idx, 10)[selection_mask]
+            filter_idx = filter_idx[selection_mask]
             # pre-mask
             if pre_mask is not None:
                 filter_idx = filter_idx & pre_mask
@@ -416,7 +423,9 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
             "radii": radii,
             "visible_mask": visible_mask,
             "selection_mask": selection_mask,
-            "opacity": opacity}
+            "neural_opacity": neural_opacity,
+            "xyz": xyz,
+            "semantic": semantic}
 
 def prefilter_voxel(viewpoint_camera, pc, pipe, bg_color):
     """

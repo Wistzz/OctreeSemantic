@@ -72,22 +72,22 @@ class OptimizationParams(ParamGroup):
     def __init__(self, parser):
         self.leaf_update_fr = 300           # coarse-level codebook update frequency
         self.ins_feat_dim = 6
-        self.position_lr_init = 0.00016
-        self.position_lr_final = 0.0000016
+        self.position_lr_init = 0.0#0.00016
+        self.position_lr_final = 0.0#0.0000016
         self.offset_lr_init = 0.01
         self.offset_lr_final = 0.0001
         self.offset_lr_delay_mult = 0.01
         self.offset_lr_max_steps = 30_000
         self.position_lr_delay_mult = 0.01
         self.position_lr_max_steps = 30_000
-        self.feature_lr = 0.0025
+        self.feature_lr = 0.0075
         self.ins_feat_lr = 0.001
-        self.opacity_lr = 0.05
-        self.scaling_lr = 0.005
-        self.rotation_lr = 0.001
+        self.opacity_lr = 0.02
+        self.scaling_lr = 0.007
+        self.rotation_lr = 0.002
         self.percent_dense = 0.01
         self.lambda_dssim = 0.2
-        self.update_interval = 100
+       
 
         self.mlp_opacity_lr_init = 0.002
         self.mlp_opacity_lr_final = 0.00002
@@ -115,9 +115,14 @@ class OptimizationParams(ParamGroup):
         #-----------------------------
         # self.opacity_reset_interval = 3000
         self.update_from = 1500
-        self.update_until = 25_000
+        self.update_until = 15_000
+        self.update_interval = 100
+        self.update_depth = 3
+        self.update_init_factor = 16
+        self.update_hierachy_factor = 4
         self.start_stat = 500
         self.densify_grad_threshold = 0.0002
+        self.voxel_size =  0.001
         self.random_background = False
         self.coarse_factor=1.5
         self.coarse_iter=10000

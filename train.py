@@ -134,7 +134,7 @@ def separation_loss(feat_mean_stack, iteration):
     diff_squared = (feat_expanded - feat_transposed).pow(2).sum(2)
     
     # Calculate the inverse of the distance to enhance discrimination
-    epsilon = 1     # 1e-6
+    epsilon = 1e-6 #1     # 1e-6
     inverse_distance = 1.0 / (diff_squared + epsilon)
     # Exclude diagonal elements (distance from itself) and calculate the mean inverse distance
     mask = torch.eye(N, device=feat_mean_stack.device).bool()
@@ -154,6 +154,76 @@ def separation_loss(feat_mean_stack, iteration):
 
     return loss
 
+
+def multi_class_n_pair_loss(feat_mean_stack):
+    """
+    :param feat_mean_stack: 形状为 [N, C] 的特征张量，N 是掩码数量，C 是特征维度
+    :return: 多类 N 对损失
+    """
+    N, C = feat_mean_stack.shape
+    loss = 0
+    for i in range(N):
+        anchor = feat_mean_stack[i].unsqueeze(0)
+        positive = None
+        negatives = []
+        for j in range(N):
+            if j == i:
+                continue
+            if positive is None:
+                positive = feat_mean_stack[j].unsqueeze(0)
+            else:
+                negatives.append(feat_mean_stack[j].unsqueeze(0))
+        negatives = torch.cat(negatives, dim=0)
+
+        pos_logit = torch.matmul(anchor, positive.T).squeeze()
+        neg_logits = torch.matmul(anchor, negatives.T).squeeze()
+
+        logsumexp = torch.logsumexp(neg_logits, dim=0)
+        loss += F.softplus(logsumexp - pos_logit)
+
+    loss /= N
+    return loss
+
+def infonce_loss(feat_mean_stack, temperature=0.1):
+    """
+    :param feat_mean_stack: 形状为 [N, C] 的特征张量，N 是掩码数量，C 是特征维度
+    :param temperature: 温度参数，用于调整相似度分布
+    :return: InfoNCE 损失
+    """
+    N, C = feat_mean_stack.shape
+    # 计算特征之间的相似度矩阵
+    similarity_matrix = torch.matmul(feat_mean_stack, feat_mean_stack.T)  # [N, N]
+    similarity_matrix /= temperature
+
+    # 创建标签，对角线元素为正样本对
+    labels = torch.arange(N, device=feat_mean_stack.device)
+
+    # 计算交叉熵损失
+    loss = F.cross_entropy(similarity_matrix, labels)
+    return loss
+
+def lifted_structured_loss(feat_mean_stack, margin=1.0):
+    """
+    :param feat_mean_stack: 形状为 [N, C] 的特征张量，N 是掩码数量，C 是特征维度
+    :param margin: 边际值
+    :return: Lifted Structured 损失
+    """
+    N, C = feat_mean_stack.shape
+    loss = 0
+    for i in range(N):
+        for j in range(N):
+            if i == j:
+                continue
+            pos_dist = F.pairwise_distance(feat_mean_stack[i].unsqueeze(0), feat_mean_stack[j].unsqueeze(0))
+            neg_dist_sum = 0
+            for k in range(N):
+                if k != i and k != j:
+                    neg_dist = F.pairwise_distance(feat_mean_stack[i].unsqueeze(0), feat_mean_stack[k].unsqueeze(0))
+                    neg_dist_sum += torch.exp(margin - neg_dist)
+            loss += torch.clamp(margin + pos_dist - torch.log(neg_dist_sum), min=0)
+    loss /= (N * (N - 1))
+    return loss
+
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, \
              checkpoint, debug_from):
     iterations = [opt.start_ins_feat_iter, opt.start_leaf_cb_iter, opt.start_root_cb_iter]
@@ -162,7 +232,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
-    gaussians = GaussianModel(dataset.sh_degree)
+    gaussians = GaussianModel(dataset.sh_degree, opt=opt)
     scene = Scene(dataset, gaussians)
     gaussians.set_coarse_interval(opt)
     gaussians.training_setup(opt)
@@ -233,28 +303,28 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     for iteration in range(first_iter, opt.iterations + 1):        
         no_need_bk = False
         
-        if network_gui.conn == None:
-            network_gui.try_connect()
-        while network_gui.conn != None:
-            try:
-                net_image_bytes = None
-                custom_cam, do_training, pipe.convert_SHs_python, pipe.compute_cov3D_python, keep_alive, scaling_modifer = network_gui.receive()
-                if custom_cam != None:
-                    net_image = render(custom_cam, gaussians, pipe, background, iteration, scaling_modifer)["render"]
-                    net_image_bytes = memoryview((torch.clamp(net_image, min=0, max=1.0) * 255).byte().permute(1, 2, 0).contiguous().cpu().numpy())
-                network_gui.send(net_image_bytes, dataset.source_path)
-                if do_training and ((iteration < int(opt.iterations)) or not keep_alive):
-                    break
-            except Exception as e:
-                network_gui.conn = None
+        # if network_gui.conn == None:
+        #     network_gui.try_connect()
+        # while network_gui.conn != None:
+        #     try:
+        #         net_image_bytes = None
+        #         custom_cam, do_training, pipe.convert_SHs_python, pipe.compute_cov3D_python, keep_alive, scaling_modifer = network_gui.receive()
+        #         if custom_cam != None:
+        #             net_image = render(custom_cam, gaussians, pipe, background, iteration, scaling_modifer)["render"]
+        #             net_image_bytes = memoryview((torch.clamp(net_image, min=0, max=1.0) * 255).byte().permute(1, 2, 0).contiguous().cpu().numpy())
+        #         network_gui.send(net_image_bytes, dataset.source_path)
+        #         if do_training and ((iteration < int(opt.iterations)) or not keep_alive):
+        #             break
+        #     except Exception as e:
+        #         network_gui.conn = None
 
         iter_start.record()
 
         gaussians.update_learning_rate(iteration, opt.start_root_cb_iter, opt.start_leaf_cb_iter)
 
-        # Every 1000 its we increase the levels of SH up to a maximum degree
-        if iteration % 1000 == 0:
-            gaussians.oneupSHdegree()
+        # # Every 1000 its we increase the levels of SH up to a maximum degree
+        # if iteration % 1000 == 0:
+        #     gaussians.oneupSHdegree()
 
         # Pick a random Camera
         if not viewpoint_stack:
@@ -327,9 +397,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 assign = True   # Reassign cluster centers
             else:
                 assign = False  #  update cluster centers
-            # xyz, color, opacity, scaling, rot, semantic, sh_degree, selection_mask = gaussians.generate_neural_gaussians(viewpoint_cam)
-            gaussians._xyz = gaussians._anchor
-            gaussians._ins_feat = gaussians._anchor_feat_semantic
+            xyz, color, opacity, scaling, rot, semantic, sh_degree, selection_mask, neural_opacity = gaussians.generate_neural_gaussians(viewpoint_cam)
+            gaussians._xyz = xyz#render_pkg['xyz'].detach()
+            gaussians._ins_feat = semantic#render_pkg['semantic']
             ins_feat_codebook.forward(gaussians, iteration, assign=assign, \
                                       mode=cb_mode, selected_leaf=root_id, \
                                       pos_weight=opt.pos_weight)   # note: position weight
@@ -355,6 +425,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         else:
             rescale=False
 
+        retain_grad = (iteration < opt.update_until and iteration >= 0)
         render_pkg = render(viewpoint_cam, gaussians, pipe, bg, iteration,
                             rescale=rescale,                # wherther to re-scale the gaussian scale
                             cluster_idx=cluster_indices,    # coarse-level cluster id
@@ -362,10 +433,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                             render_feat_map=render_feat, 
                             octree = octree,
                             render_cluster=render_cluster,
-                            selected_root_id=root_id, cb_mode=cb_mode)       # coarse id (stage 2.2)
+                            selected_root_id=root_id, cb_mode=cb_mode, retain_grad=retain_grad)       # coarse id (stage 2.2)
         # rendered results
         image, viewspace_point_tensor, visibility_filter, radii = \
             render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
+
+        visible_mask = render_pkg["visible_mask"]
+        offset_selection_mask = render_pkg["selection_mask"] 
+        opacity = render_pkg["neural_opacity"]
         alpha = render_pkg["alpha"]
         rendered_silhouette = render_pkg["silhouette"] if render_pkg["silhouette"] is not None else alpha
         rendered_silhouette = (rendered_silhouette > 0.7) * 1.0 # mask after re-scale
@@ -373,7 +448,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         rendered_cluster_imgs = render_pkg["cluster_imgs"]  # [num_cl, 6, H, W]
         rendered_leaf_cluster_imgs = render_pkg["leaf_clusters_imgs"]
         rendered_cluster_silhouettes = render_pkg["cluster_silhouettes"]
-        opacity = render_pkg['opacity']
         if render_cluster:
             if rendered_cluster_silhouettes is not None and len(rendered_cluster_silhouettes) > 0:
                 rendered_cluster_silhouettes = rendered_cluster_silhouettes > 0.7
@@ -400,9 +474,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             scene.gaussians._anchor_feat = scene.gaussians._anchor_feat.detach()
             # scene.gaussians._features_dc = scene.gaussians._features_dc.detach()
             # scene.gaussians._features_rest = scene.gaussians._features_rest.detach()
-            # scene.gaussians._opacity = scene.gaussians._opacity.detach()
-            # scene.gaussians._scaling = scene.gaussians._scaling.detach()
-            # scene.gaussians._rotation = scene.gaussians._rotation.detach()
+            scene.gaussians._opacity = scene.gaussians._opacity.detach()
+            scene.gaussians._scaling = scene.gaussians._scaling.detach()
+            scene.gaussians._rotation = scene.gaussians._rotation.detach()
             for param in scene.gaussians.mlp_opacity.parameters():
                 param.requires_grad = False
                 assert param.requires_grad is False, "Failed to freeze mlp_opacity parameters."
@@ -426,12 +500,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             if cb_mode is None:
                 # (0) compute the average instance features within each mask. [num_mask, 6]
                 feat_mean_stack = mask_feature_mean(rendered_ins_feat, mask_bool, image_mask=rendered_silhouette)
-                # (1) intra-mask smoothing loss. Eq.(1) in the paper
-                loss_cohesion = cohesion_loss(rendered_ins_feat, mask_bool, feat_mean_stack)
-                # (2) inter-mask contrastive loss Eq.(2) in the paper
-                loss_separation = separation_loss(feat_mean_stack, iteration)
-                # total loss, opt.loss_weight: 0.1
-                loss = loss_separation + opt.loss_weight * loss_cohesion
+                # # (1) intra-mask smoothing loss. Eq.(1) in the paper
+                # loss_cohesion = cohesion_loss(rendered_ins_feat, mask_bool, feat_mean_stack)
+                # # (2) inter-mask contrastive loss Eq.(2) in the paper
+                # loss_separation = separation_loss(feat_mean_stack, iteration)
+                # # total loss, opt.loss_weight: 0.1
+                # loss = loss_separation + opt.loss_weight * loss_cohesion
+
+                loss = multi_class_n_pair_loss(feat_mean_stack)
         
         # ####################################################
         # [Stage 2]: Two-Level Codebook for Discretization 
@@ -576,19 +652,27 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 # else:
                 #     scene.save(iteration)
 
-            # # Densification
-            # if iteration < opt.update_until and \
-            #     not opt.frozen_init_pts:
-            #     if iteration > opt.update_from and iteration % opt.update_interval == 0:
-            #         gaussians.run_densify(iteration, opt)
-
-            # # borrow from octree-gs
+            # # # densification from scaffold-gs
             if iteration < opt.update_until and iteration > opt.start_stat:
                 # add statis
-                gaussians.training_statis(render_pkg, image.shape[2], image.shape[1])
+                gaussians.training_statis(viewspace_point_tensor, opacity, visibility_filter, offset_selection_mask, visible_mask)
+                
                 # densification
                 if iteration > opt.update_from and iteration % opt.update_interval == 0:
-                    gaussians.run_densify(iteration, opt)
+                    gaussians.adjust_anchor(check_interval=opt.update_interval, success_threshold=opt.success_threshold, grad_threshold=opt.densify_grad_threshold, min_opacity=opt.min_opacity)
+            elif iteration == opt.update_until:
+                del gaussians.opacity_accum
+                del gaussians.offset_gradient_accum
+                del gaussians.offset_denom
+                torch.cuda.empty_cache()
+
+            # # # borrow from octree-gs
+            # if iteration < opt.update_until and iteration > opt.start_stat:
+            #     # add statis
+            #     gaussians.training_statis(render_pkg, image.shape[2], image.shape[1])
+            #     # densification
+            #     if iteration > opt.update_from and iteration % opt.update_interval == 0:
+            #         gaussians.run_densify(iteration, opt)
 
             # Optimizer step
             if iteration < opt.iterations:

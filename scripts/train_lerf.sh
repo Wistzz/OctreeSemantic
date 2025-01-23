@@ -14,14 +14,14 @@ conda activate opengs
 # --save_memory: Saves memory, but will reduce training speed. If your GPU memory > 24GB, you can omit this flag
 ###############################################
 scan="figurines"
-gpu_num=3           # change
+gpu_num=3       # change
 echo "Training for ${scan} ....."
-CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 662$gpu_num \
+CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 416$gpu_num \
     -s /data/sunwei/OpenGaussian/data/lerf_ovs/${scan} \
-    --iterations 70_000 \
-    --start_ins_feat_iter 30_000 \
-    --start_root_cb_iter 40_000 \
-    --start_leaf_cb_iter 50_000 \
+    --iterations 70000 \
+    --start_ins_feat_iter 30000 \
+    --start_root_cb_iter 40000 \
+    --start_leaf_cb_iter 50000 \
     --sam_level 3 \
     --root_node_num 64 \
     --leaf_node_num 10 \
@@ -40,10 +40,10 @@ CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 662$gpu_num \
 # # # No need to set save_memory, 24G is sufficient.
 # # ###############################################
 # scan="waldo_kitchen"
-# gpu_num=3           # change
+# gpu_num=4          # change
 # echo "Training for ${scan} ....."
-# CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 601$gpu_num \
-#     -s /gdata/cold1/wuyanmin/OpenGaussian/data/lerf_ovs/${scan} \
+# CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 801$gpu_num \
+#     -s /data/sunwei/OpenGaussian/data/lerf_ovs/${scan} \
 #     --iterations 70_000 \
 #     --start_ins_feat_iter 30_000 \
 #     --start_root_cb_iter 40_000 \
@@ -64,10 +64,10 @@ CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 662$gpu_num \
 # --save_memory: Saves memory, but will reduce training speed. If your GPU memory > 24GB, you can omit this flag
 ###############################################
 # scan="teatime"
-# gpu_num=3       # change
+# gpu_num=0       # change
 # echo "Training for ${scan} ....."
-# CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 603$gpu_num \
-#     -s /data/sunwei/OpenGaussian/data/teatime/ \
+# CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 703$gpu_num \
+#     -s /data/sunwei/OpenGaussian/data/lerf_ovs/teatime/ \
 #     --iterations 70_000 \
 #     --start_ins_feat_iter 30_000 \
 #     --start_root_cb_iter 40_000 \

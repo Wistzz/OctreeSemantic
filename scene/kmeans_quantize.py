@@ -14,8 +14,8 @@ class Quantize_kMeans():
         self.num_clusters = num_clusters            # k1
         self.leaf_num_clusters = num_leaf_clusters  # k2
         self.num_kmeans_iters = num_iters           # iter
-        self.vec_dim = 35#dim                          # coarse-level, dim=9(feat+xyz)
-        self.leaf_vec_dim = 32#dim_leaf                # fine-level, dim=6(feat)
+        self.vec_dim = dim                          # coarse-level, dim=9(feat+xyz)
+        self.leaf_vec_dim = dim_leaf                # fine-level, dim=6(feat)
         self.centers = torch.empty(0)               # coarse center， [k1, 9]
         self.leaf_centers = torch.empty(0)          # fine center， [k2, 6]
         self.iLeafSubNum = torch.empty(0)           # Number of fine clusters per coarse cluster
@@ -271,7 +271,7 @@ class Quantize_kMeans():
             vec_dim = self.leaf_vec_dim
         sampled_centers = torch.gather(centers, 0, self.nn_index.unsqueeze(-1).repeat(1, vec_dim))
         # NOTE: "During backpropagation, the gradients of the quantized features are copied to the instance features", mentioned in the paper.
-        gaussian._ins_feat_q = gaussian._ins_feat - gaussian._ins_feat.detach() + sampled_centers[:,:32]
+        gaussian._ins_feat_q = gaussian._ins_feat - gaussian._ins_feat.detach() + sampled_centers[:,:6]
 
     def replace_with_centers(self, gaussian):
         deg = gaussian._features_rest.shape[1]
