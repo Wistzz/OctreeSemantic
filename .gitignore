@@ -1,0 +1,24 @@
+*.pyc
+# .vscode
+*.ply
+.git---
+output
+*.pth
+text_features.json
+build
+data
+diff_rasterization/diff_rast.egg-info
+diff_rasterization/dist
+tensorboard_3d
+screenshots
+*.ipynb_checkpoints
+# submodules/
+# assets/
+*.npz
+*.bundle
+output*
+*.log
+log
+data
+assets
+LangSplat
