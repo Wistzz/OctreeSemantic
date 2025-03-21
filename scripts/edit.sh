@@ -1,7 +1,5 @@
-source ~/anaconda3/etc/profile.d/conda.sh
-
-# 激活指定的 conda 环境
+eval "$(conda shell.bash hook)"
 conda activate opengs
-export CUDA_VISIBLE_DEVICES=3
+export CUDA_VISIBLE_DEVICES=4
 # python render_lerf_by_text.py -m "./output/IMG8304" --scene_name "IMG8304"
-python render_lerf_by_text.py -m "./output/40a45240-c" --scene_name "figurines"
+python render_lerf_by_text.py -m "./output/0.3" --scene_name "figurines"

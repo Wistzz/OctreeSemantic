@@ -4,9 +4,7 @@
 
 # !!! Please check the dataset path specified by -s.
 # 假设你的 Anaconda 安装在默认路径
-source ~/anaconda3/etc/profile.d/conda.sh
-
-# 激活指定的 conda 环境
+eval "$(conda shell.bash hook)"
 conda activate opengs
 ###############################################
 #              (1/4) figurines
@@ -17,10 +15,10 @@ conda activate opengs
 # --save_memory: Saves memory, but will reduce training speed. If your GPU memory > 24GB, you can omit this flag
 ##############################################
 scan="figurines"
-gpu_num=1 # change
+gpu_num=6 # change
 echo "Training for ${scan} ....."
-CUDA_LAUNCH_BLOCKING=1 CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 500$gpu_num \
-    -s /home/sw/OpenGaussian/data/lerf_ovs/${scan} \
+CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 500$gpu_num \
+    -s /data/sunwei/OpenGaussian/data/lerf_ovs/${scan} \
     --iterations 40000 \
     --start_ins_feat_iter 30000 \
     --start_root_cb_iter 40000 \
@@ -32,7 +30,7 @@ CUDA_LAUNCH_BLOCKING=1 CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 500$
     --test_iterations 30000 \
     --spatial_grid_size 2.0 \
     --eval \
-    --start_checkpoint /home/sw/gaussian-splatting/output/052be2e9-1/chkpnt30000.pth
+    --start_checkpoint /data/sunwei/gaussian-splatting/output/figurines/chkpnt30000.pth
     
 
 

@@ -67,7 +67,7 @@ if __name__ == "__main__":
         parser.error("The --scene_name argument is required and must be one of: waldo_kitchen, ramen, figurines, teatime")
 
     # TODO: change
-    path_gt = "data/label/figurines/gt"
+    path_gt = "/data/sunwei/OpenGaussian/data/lerf_ovs/label/figurines/gt"
     # renders_cluster_silhouette is the predicted mask
-    path_pred = "/home/sw/OpenGaussian/output/40a45240-c/text2obj/ours_40000/renders_cluster_silhouette"
+    path_pred = "/data/sunwei/OctreeSemantic/output/0.3/text2obj/ours_40000/renders_cluster_silhouette"
     evalute(path_gt, path_pred, args.scene_name)

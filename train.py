@@ -163,149 +163,104 @@ def separation_loss(feat_mean_stack, iteration, margin=1.0):
     loss = triplet_loss.mean()
     return loss
 
-########### Triplet内聚版本
-# def separation_loss(feat_map, gt_mask, feat_mean_stack, margin=1.0):
-#     """
-#     feat_map: [C, H, W], 点云特征图
-#     gt_mask: [N, H, W], 实例掩码，N 是实例数
-#     feat_mean_stack: [N, C], 每个实例的平均特征
-#     margin: Triplet 损失的边距
-#     """
-#     N, H, W = gt_mask.shape
-#     C = feat_map.shape[0]
-    
-#     # 计算正样本距离（Pull：拉近同一实例内的点到均值）
-#     feat_flat = feat_map.view(1, C, -1)  # [1, C, H*W]
-#     mask_flat = gt_mask.view(N, 1, -1)   # [N, 1, H*W]
-#     masked_feats = feat_flat * mask_flat  # [N, C, H*W]
-#     pos_dist = (masked_feats - feat_mean_stack.view(N, C, 1)).norm(p=2, dim=1)  # [N, H*W]
-#     pos_dist = (pos_dist * mask_flat.squeeze(1)).sum(dim=1) / mask_flat.sum(dim=2).squeeze(1).clamp(min=1)  # [N]
-    
-#     # 计算负样本距离（Push：推远不同实例的均值）
-#     anchor_expanded = feat_mean_stack.unsqueeze(1).expand(N, N, C)  # [N, N, C]
-#     negative_expanded = feat_mean_stack.unsqueeze(0).expand(N, N, C)  # [N, N, C]
-#     neg_dist = torch.sqrt(torch.clamp((anchor_expanded - negative_expanded).pow(2).sum(2), min=1e-6))  # [N, N]
-#     mask = ~torch.eye(N, device=feat_mean_stack.device).bool()
-#     valid_neg_dist = neg_dist[mask].view(N, N-1)  # [N, N-1]
-#     min_neg_dist, _ = valid_neg_dist.min(dim=1)  # [N]
-    
-#     # Unified Triplet Loss
-#     triplet_loss = torch.relu(pos_dist - min_neg_dist + margin)
-#     return triplet_loss.mean()
-
-
-class GNNFeatureExtractor(nn.Module):
-    def __init__(self, in_channels=6, hidden_channels=32, out_channels=6, k=9):
-        super().__init__()
-        self.k = k
-        self.conv1 = PointNetConv(local_nn=nn.Linear(3 + in_channels, hidden_channels))
-        self.conv2 = PointNetConv(local_nn=nn.Linear(3 + hidden_channels, out_channels))
-        self.alpha = nn.Parameter(torch.ones(1, out_channels) * 0.5)
-        nn.init.xavier_uniform_(self.conv1.local_nn.weight)
-        nn.init.zeros_(self.conv1.local_nn.bias)
-        nn.init.xavier_uniform_(self.conv2.local_nn.weight)
-        nn.init.zeros_(self.conv2.local_nn.bias)
-        self.edge_index = None
-
-    def precompute_knn(self, pos):
-        # FPS 采样 50% 的点，减少计算量
-        sample_idx = fps(pos, ratio=0.4)
-        sampled_pos = pos[sample_idx]
-        self.edge_index = knn_graph(sampled_pos, k=self.k, loop=False)
-        self.sample_idx = sample_idx
-
-    def forward(self, pos, initial_feats):
-        if self.edge_index is None:
-            raise ValueError("请先调用 precompute_knn 方法预计算 KNN 图")
-        
-        # 采样输入特征
-        sampled_feats = initial_feats[self.sample_idx]
-        sampled_pos = pos[self.sample_idx]
-        
-        # 两层 GNN 计算
-        data = Data(x=sampled_feats, pos=sampled_pos, edge_index=self.edge_index)
-        x = F.relu(self.conv1(data.x, data.pos, data.edge_index))
-        enhanced_feats = self.conv2(x, data.pos, data.edge_index)
-        
-        # 插值回全点云
-        full_enhanced_feats = torch.zeros_like(initial_feats)
-        full_enhanced_feats[self.sample_idx] = enhanced_feats
-        
-        return full_enhanced_feats
-
-from sklearn.neighbors import NearestNeighbors
-
 # class GNNFeatureExtractor(nn.Module):
-#     def __init__(self, in_channels=6, hidden_channels=32, out_channels=6, k=9, coarse_ratio=0.2, fine_ratio=0.1):
+#     def __init__(self, in_channels=6, hidden_channels=32, out_channels=6, k=9):
 #         super().__init__()
-#         self.k = k  # 默认 k 值
-#         self.coarse_ratio = coarse_ratio  # 粗采样比例
-#         self.fine_ratio = fine_ratio  # 细采样比例
-        
-#         # 定义两层 PointNetConv
+#         self.k = k
 #         self.conv1 = PointNetConv(local_nn=nn.Linear(3 + in_channels, hidden_channels))
 #         self.conv2 = PointNetConv(local_nn=nn.Linear(3 + hidden_channels, out_channels))
-        
+#         self.alpha = nn.Parameter(torch.ones(1, out_channels) * 0.5)
+#         nn.init.xavier_uniform_(self.conv1.local_nn.weight)
+#         nn.init.zeros_(self.conv1.local_nn.bias)
+#         nn.init.xavier_uniform_(self.conv2.local_nn.weight)
+#         nn.init.zeros_(self.conv2.local_nn.bias)
 #         self.edge_index = None
-#         self.sample_idx = None
 
 #     def precompute_knn(self, pos):
-#         """完全无 for 循环的多层次采样和自适应 k-NN 图"""
-#         N = pos.size(0)
-        
-#         # 第一层：粗采样
-#         coarse_idx = fps(pos, ratio=self.coarse_ratio)  # [M]
-#         coarse_pos = pos[coarse_idx]  # [M, 3]
-#         M = coarse_idx.size(0)
-        
-#         # 第二层：批量计算邻域并细采样
-#         dist = torch.cdist(pos, coarse_pos)  # [N, M]
-#         num_neighbors = min(100, N)  # 每个粗采样点的邻域大小
-#         _, neighbors = torch.topk(dist, k=num_neighbors, dim=0, largest=False)  # [num_neighbors, M]
-        
-#         # 批量随机细采样
-#         num_fine_per_coarse = int(num_neighbors * self.fine_ratio)
-#         fine_idx = torch.zeros(M * num_fine_per_coarse, dtype=torch.long, device=pos.device)
-#         for i in range(M):
-#             start_idx = i * num_fine_per_coarse
-#             end_idx = start_idx + num_fine_per_coarse
-#             perm = torch.randperm(num_neighbors, device=pos.device)[:num_fine_per_coarse]
-#             fine_idx[start_idx:end_idx] = neighbors[perm, i]
-        
-#         # 合并粗采样和细采样点
-#         sample_idx = torch.unique(torch.cat([coarse_idx, fine_idx]))
+#         # FPS 采样 50% 的点，减少计算量
+#         sample_idx = fps(pos, ratio=0.4)
 #         sampled_pos = pos[sample_idx]
-        
-#         # 自适应 k-NN：基于全局密度估计
-#         dist_to_neighbors = torch.cdist(sampled_pos, sampled_pos)  # [S, S]
-#         kth_dist = torch.topk(dist_to_neighbors, k=5, largest=False).values[:, -1]  # 第 5 近邻距离
-#         densities = 1 / (kth_dist + 1e-6)
-#         max_k = int(5 + 10 * (1 - densities.min() / densities.max()))  # 用全局最大 k
-#         self.edge_index = knn_graph(sampled_pos, k=max_k, loop=False)
+#         self.edge_index = knn_graph(sampled_pos, k=self.k, loop=False)
 #         self.sample_idx = sample_idx
 
 #     def forward(self, pos, initial_feats):
 #         if self.edge_index is None:
 #             raise ValueError("请先调用 precompute_knn 方法预计算 KNN 图")
         
+#         # 采样输入特征
 #         sampled_feats = initial_feats[self.sample_idx]
 #         sampled_pos = pos[self.sample_idx]
         
+#         # 两层 GNN 计算
 #         data = Data(x=sampled_feats, pos=sampled_pos, edge_index=self.edge_index)
 #         x = F.relu(self.conv1(data.x, data.pos, data.edge_index))
 #         enhanced_feats = self.conv2(x, data.pos, data.edge_index)
         
-#         full_enhanced_feats = self.interpolate_features(pos, sampled_pos, enhanced_feats)
+#         # 插值回全点云
+#         full_enhanced_feats = torch.zeros_like(initial_feats)
+#         full_enhanced_feats[self.sample_idx] = enhanced_feats
+        
 #         return full_enhanced_feats
 
-#     def interpolate_features(self, pos, sampled_pos, sampled_feats):
-#         """反距离加权插值"""
-#         dist = torch.cdist(pos, sampled_pos)
-#         _, indices = torch.topk(dist, k=3, largest=False)
-#         weights = 1 / (dist.gather(1, indices) + 1e-6)
-#         weights /= weights.sum(dim=1, keepdim=True)
-#         interpolated_feats = torch.sum(weights.unsqueeze(2) * sampled_feats[indices], dim=1)
-#         return interpolated_feats
+import torch_scatter
+class GNNFeatureExtractor(nn.Module):
+    def __init__(self, in_channels=6, hidden_channels=32, out_channels=6, k=5):
+        super().__init__()
+        self.k = k  # KNN for interpolation and graph
+        self.conv1 = PointNetConv(local_nn=nn.Linear(3 + in_channels, hidden_channels))
+        self.conv2 = PointNetConv(local_nn=nn.Linear(3 + hidden_channels, out_channels))
+        nn.init.xavier_uniform_(self.conv1.local_nn.weight)
+        nn.init.zeros_(self.conv1.local_nn.bias)
+        nn.init.xavier_uniform_(self.conv2.local_nn.weight)
+        nn.init.zeros_(self.conv2.local_nn.bias)
+        self.edge_index = None
+        self.sample_idx = None
+        self.interpolation_indices = None
+
+    def precompute_knn(self, pos):
+        # FPS sampling
+        self.sample_idx = fps(pos, ratio=0.1)  # Adjust ratio as needed (e.g., 0.05 for more memory efficiency)
+        sampled_pos = pos[self.sample_idx]
+        
+        # Build KNN graph for sampled points
+        self.edge_index = knn_graph(sampled_pos, k=self.k, loop=False)
+        
+        # Compute interpolation indices using faiss
+        sampled_pos_np = sampled_pos.cpu().numpy()
+        index = faiss.IndexFlatL2(3)  # 3D coordinates
+        index.add(sampled_pos_np)
+        
+        # Find k nearest sampled points for each point in pos
+        pos_np = pos.cpu().numpy()
+        _, I = index.search(pos_np, self.k)  # I contains indices of k nearest neighbors
+        self.interpolation_indices = torch.from_numpy(I).to(pos.device)
+
+    def forward(self, pos, initial_feats):
+        if self.edge_index is None or self.interpolation_indices is None:
+            raise ValueError("Please call precompute_knn first")
+        
+        # Sample features
+        sampled_feats = initial_feats[self.sample_idx]
+        sampled_pos = pos[self.sample_idx]
+        
+        # GNN on sampled points
+        data = Data(x=sampled_feats, pos=sampled_pos, edge_index=self.edge_index)
+        x = F.relu(self.conv1(data.x, data.pos, data.edge_index))
+        enhanced_feats = self.conv2(x, data.pos, data.edge_index)
+        
+        # Interpolate to full point cloud
+        # Flatten indices for scatter operation
+        indices = self.interpolation_indices.view(-1)  # [N_pts * k]
+        point_ids = torch.arange(pos.size(0), device=pos.device).view(-1, 1).repeat(1, self.k).view(-1)  # [N_pts * k]
+        
+        # Gather features of nearest neighbors
+        gathered = enhanced_feats[indices]  # [N_pts * k, C]
+        
+        # Scatter and mean to interpolate
+        interpolated = torch_scatter.scatter_mean(gathered, point_ids, dim=0, dim_size=pos.size(0))  # [N_pts, C]
+        
+        return interpolated
+
 
 # MLP
 # class GNNFeatureExtractor(nn.Module):
@@ -512,12 +467,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         if iteration >= 30001:
             if iteration == 30001:
                 start = time.time()
-                gnn.precompute_knn(gaussians._xyz)
+                gnn.precompute_knn(gaussians._xyz.detach())
                 print(f"Precompute KNN: {time.time() - start:.2f} seconds")
             ins_feat = gaussians._ins_feat
             ins_feat_norm = (ins_feat - ins_feat.mean(dim=0, keepdim=True)) / (ins_feat.std(dim=0, keepdim=True) + 1e-6)
 
-            enhanced_feats = gnn(gaussians._xyz, ins_feat_norm)
+            enhanced_feats = gnn(gaussians._xyz.detach(), ins_feat_norm)
             enhanced_feats_norm = (enhanced_feats - enhanced_feats.mean(dim=0, keepdim=True)) / \
                                 (enhanced_feats.std(dim=0, keepdim=True) + 1e-6)
 
@@ -910,91 +865,7 @@ def construct_pseudo_ins_feat(scene : Scene, renderFunc, renderArgs,
     # Preprocessing for Stage 2.2
     # determine how many objects are in each coarse cluster, not just setting a fixed k2 value.
     # ##################################################################################################
-    # torch.cuda.empty_cache()
-    # if mode=="leaf":
-    #     iClusterSubNum = torch.ones(cluster_indices.max()+1).to(torch.int32)
-    #     for idx, view in enumerate(tqdm(sorted_train_cameras, desc="render coarse-level cluster")):
-    #         if not view.data_on_gpu:
-    #             view.to_gpu()
-    #         render_pkg = renderFunc(view, scene.gaussians, *renderArgs, cluster_idx=cluster_indices, rescale=False,\
-    #                                 render_feat_map=False, render_cluster=True, origin_feat=True, better_vis=True,
-    #                                 root_num=root_num, leaf_num=leaf_num)
-    #         rendered_cluster_imgs = render_pkg["cluster_imgs"]  # coarse cluster feature map
-    #         rendered_cluster_silhouettes = render_pkg["cluster_silhouettes"] # coarse cluster mask
-    #         cluster_occur = render_pkg["cluster_occur"] # bool [k1] Whether coarse clusters visible in the current view
-
-    #         pser_cluster_pesudo_mask = []
-    #         i = -1
-    #         for cluster_idx in range(cluster_indices.max()+1):
-    #             if not cluster_occur[cluster_idx]:  # Process only coarse clusters visible in the current view
-    #                 continue
-
-    #             i += 1
-    #             rendered_ins_feat = rendered_cluster_imgs[i]    # cluster feat map
-    #             rendered_silhouette = (rendered_cluster_silhouettes[i] > 0.9).unsqueeze(0)  # cluster mask
-
-    #             # (1) compute the IoU of this cluster with pseudo masks.
-    #             ious = calculate_iou(view.pesudo_mask_bool, rendered_silhouette, base="former")
-    #             # pseudo masks with IoU above threshold
-    #             inters_mask = view.pesudo_mask_bool[ious[0] > 0.2]  # [num_mask, H, W]
-    #             inters_mask_ = inters_mask.sum(0).to(torch.bool)   # [H, W] bool
-    #             # pseudo mask features, noly for visalization [6, H, W]
-    #             inters_pesudo_ins_feat = view.pesudo_ins_feat * inters_mask_.unsqueeze(0) 
-
-    #             # (2) compute the distance between coarse cluster features and pseudo features
-    #             # mean feature of the pesudo mask, [num_mask, 6]
-    #             inters_mask_feat_mean = mask_feature_mean(view.pesudo_ins_feat, inters_mask) 
-    #             # mean feature of the cluster, [num_mask, 6]
-    #             cluster_mask_feat_mean = mask_feature_mean(rendered_ins_feat, inters_mask, image_mask=rendered_silhouette) 
-    #             # distance
-    #             l1_dis, l2_dis = calculate_distances(inters_mask_feat_mean, cluster_mask_feat_mean)   # metric="l1"
-
-    #             # (3) filter out some pseudo masks
-    #             inters_mask_filter = inters_mask[(l1_dis < 0.9) & (l2_dis < 0.5)]  # l2_disk < 0.8
-    #             if inters_mask_filter.shape[0] > 10:    # TODO 10? --> leaf_num
-    #                 smallest_10 = torch.topk(l1_dis, 10, largest=False)[1]
-    #                 inters_mask_filter = inters_mask[smallest_10]
-    #             inters_mask_filter_ = inters_mask_filter.sum(0).to(torch.bool) 
-    #             inters_pesudo_ins_feat2 = view.pesudo_ins_feat * inters_mask_filter_.unsqueeze(0) # noly for visalization
-    #             if inters_mask_filter_.any() == False:  # Skip if the cluster doesn’t intersect with any pseudo masks.
-    #                 cluster_occur[cluster_idx] = False
-    #                 continue
-                
-    #             pser_cluster_pesudo_mask.append(inters_mask_filter_)    # valid mask
-    #             # NOTE: (4) Determine the number of masks (i.e., objects) in each coarse cluster.
-    #             iClusterSubNum[cluster_idx] = max(iClusterSubNum[cluster_idx], inters_mask_filter.shape[0])
-
-    #             # (5) save some intermediate results for debugging
-    #             coarse_debug = False
-    #             if coarse_debug:
-    #                 cluster_path = os.path.join(scene.model_path, "train_process", "debug_coarse_cluster", "cluster")
-    #                 cluster_silhouette_path = os.path.join(scene.model_path, "train_process", "debug_coarse_cluster", "cluster_silhouette")
-    #                 cluster_inters_pesudo_path = os.path.join(scene.model_path, "train_process", "debug_coarse_cluster", "cluster_inters_pesudo")
-    #                 makedirs(cluster_path, exist_ok=True)
-    #                 makedirs(cluster_silhouette_path, exist_ok=True)
-    #                 makedirs(cluster_inters_pesudo_path, exist_ok=True)
-
-    #                 # coarse-level cluster feature map
-    #                 torchvision.utils.save_image(rendered_ins_feat[:3,:,:].cpu(), os.path.join(cluster_path, '{0:05d}'.format(idx) + f"_c_{cluster_idx}" + "_1.png"))
-    #                 # torchvision.utils.save_image(rendered_ins_feat[3:,:,:].cpu(), os.path.join(cluster_path, '{0:05d}'.format(idx) + f"_c_{cluster_idx}" + "_2.png"))
-    #                 torchvision.utils.save_image(rendered_silhouette.to(torch.float32).cpu(), os.path.join(cluster_silhouette_path, '{0:05d}'.format(idx) + f"_c_{cluster_idx}" + "_1.png"))
-
-    #                 # pseudo masks of coarse cluster (_f represents the filtered.)
-    #                 torchvision.utils.save_image(inters_pesudo_ins_feat[:3,:,:].cpu(), os.path.join(cluster_inters_pesudo_path, '{0:05d}'.format(idx) + f"_c_{cluster_idx}" + "_1.png"))
-    #                 # torchvision.utils.save_image(inters_pesudo_ins_feat[3:,:,:].cpu(), os.path.join(cluster_inters_pesudo_path, '{0:05d}'.format(idx) + f"_c_{cluster_idx}" + "_2.png"))
-    #                 torchvision.utils.save_image(inters_pesudo_ins_feat2[:3,:,:].cpu(), os.path.join(cluster_inters_pesudo_path, '{0:05d}'.format(idx) + f"_c_{cluster_idx}" + "_1_f.png"))
-    #                 # torchvision.utils.save_image(inters_pesudo_ins_feat2[3:,:,:].cpu(), os.path.join(cluster_inters_pesudo_path, '{0:05d}'.format(idx) + f"_c_{cluster_idx}" + "_2_f.png"))
-
-    #         if view.cluster_masks is None:
-    #             view.cluster_masks = pser_cluster_pesudo_mask   # pseudo masks of coarse cluster
-    #             view.bClusterOccur = cluster_occur              # whether visible in the current view
-
-    #         if view.data_on_gpu and save_memory:
-    #             view.to_cpu()
-
-    #     # update
-    #     scene.gaussians.iClusterSubNum = (iClusterSubNum + 1).clamp(max=leaf_num)
-    #     torch.cuda.empty_cache()
+   
     
     # ###########################################################################
     # [Stage 3] 2D mask(and language feat) - 3D fine level cluster association  # 
