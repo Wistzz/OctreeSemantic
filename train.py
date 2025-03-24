@@ -35,8 +35,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import PointNetConv, knn_graph, fps
 from torch_geometric.data import Data
-from scene.kmeans_classic import ClassicKMeans, DBSCAN_Clustering, HDBSCAN_Clustering
-from scene.xmeans import XMeans
+from scene.kmeans_classic import HDBSCAN_Clustering
+# from scene.xmeans import XMeans
 # from scene.dbscan import DBSCANCluster
 from bitarray import bitarray
 from utils.system_utils import mkdir_p
@@ -44,6 +44,8 @@ from utils.opengs_utlis import mask_feature_mean, pair_mask_feature_mean, \
     get_SAM_mask_and_feat, load_code_book, \
     calculate_iou, calculate_distances, calculate_pairwise_distances
 import time
+import open3d as o3d
+
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -108,6 +110,7 @@ def save_kmeans(kmeans_list, quantized_params, out_dir, mode="root"):
     # Save codebook
     torch.save(centers_dict, os.path.join(out_dir, 'kmeans_centers.pth'))
 
+
 def cohesion_loss(feat_map, gt_mask, feat_mean_stack):
     """intra-mask smoothing loss. Eq.(1) in the paper
     Constrain the feature of each pixel within the mask to be close to the mean feature of that mask.
@@ -129,137 +132,252 @@ def cohesion_loss(feat_map, gt_mask, feat_mean_stack):
 
     return loss_per_mask.mean()
 
-def infonce_loss(feat_mean_stack, temperature=0.1):
-    """
-    :param feat_mean_stack: 形状为 [N, C] 的特征张量，N 是掩码数量，C 是特征维度
-    :param temperature: 温度参数，用于调整相似度分布
-    :return: InfoNCE 损失
-    """
+import torch
+import torch.nn.functional as F
+
+def separation_loss(feat_mean_stack, margin=1.0):
     N, C = feat_mean_stack.shape
-    # 计算特征之间的相似度矩阵
-    similarity_matrix = torch.matmul(feat_mean_stack, feat_mean_stack.T)  # [N, N]
-    similarity_matrix /= temperature
-
-    # 创建标签，对角线元素为正样本对
-    labels = torch.arange(N, device=feat_mean_stack.device)
-
-    # 计算交叉熵损失
-    loss = F.cross_entropy(similarity_matrix, labels)
+    if N <= 1:
+        return torch.tensor(0.0, device=feat_mean_stack.device)
+    
+    # L2 归一化
+    feat_norm = F.normalize(feat_mean_stack, dim=1)
+    
+    # 计算距离矩阵
+    dist_matrix = torch.cdist(feat_norm, feat_norm)  # [N, N]
+    
+    # 设置对角线为无穷大，排除自身距离
+    mask = torch.eye(N, dtype=torch.bool, device=dist_matrix.device)
+    dist_matrix = dist_matrix.masked_fill(mask, float('inf'))
+    
+    # 找到每个实例的最小距离（即最难负样本）
+    min_dist = dist_matrix.min(dim=1)[0]  # [N]
+    
+    # 计算损失
+    loss = torch.clamp(margin - min_dist, min=0).mean()
+    
     return loss
 
+# def separation_loss(feat_mean_stack, iteration, k=1):
+#     """
+#     改进的分离损失函数，仅惩罚最难的样本对
+#     :param feat_mean_stack: [N, C] 特征均值矩阵
+#     :param iteration: 当前训练迭代次数
+#     :param k: 每个样本选择的最难负样本数量
+#     """
+#     N, C = feat_mean_stack.shape
+    
+#     # 计算所有样本对的平方距离
+#     diff = feat_mean_stack.unsqueeze(0) - feat_mean_stack.unsqueeze(1)
+#     dist_sq = torch.sum(diff ** 2, dim=2)  # [N, N]
+    
+#     # 排除自身样本对
+#     eye_mask = torch.eye(N, device=dist_sq.device).bool()
+#     dist_sq = dist_sq.masked_fill(eye_mask, float('inf'))
+    
+#     # 为每个样本选择k个最难负样本（距离最小的）
+#     min_dist, min_indices = torch.topk(dist_sq, k=k, dim=1, largest=False)
+    
+#     # 构造难例对掩码
+#     mask = torch.zeros_like(dist_sq, dtype=torch.bool)
+#     for i in range(N):
+#         mask[i, min_indices[i]] = True
+    
+#     # 计算难例对的逆距离
+#     epsilon = 1e-6
+#     inverse_dist = 1.0 / (dist_sq[mask] + epsilon)
+    
+#     # 动态权重调整
+#     if iteration > 35000:
+#         # 后期加强难例惩罚
+#         weights = 1.0 + 0.5 * (1.0 - (inverse_dist - inverse_dist.min()) / (inverse_dist.max() - inverse_dist.min()))
+#     else:
+#         # 前期均匀权重
+#         weights = torch.ones_like(inverse_dist)
+    
+#     # 计算损失
+#     loss = (inverse_dist * weights).mean()
+    
+#     return loss
 
 
-########### Triplet无内聚版本
-def separation_loss(feat_mean_stack, iteration, margin=1.0):
-    N, C = feat_mean_stack.shape
-    anchor_expanded = feat_mean_stack.unsqueeze(1).expand(N, N, C)
-    negative_expanded = feat_mean_stack.unsqueeze(0).expand(N, N, C)
-    neg_dist = torch.sqrt(torch.clamp((anchor_expanded - negative_expanded).pow(2).sum(2), min=1e-6))
-    mask = ~torch.eye(N, device=feat_mean_stack.device).bool()
-    valid_neg_dist = neg_dist[mask].view(N, N-1)
-    min_neg_dist, _ = valid_neg_dist.min(dim=1)
-    pos_dist = torch.zeros(N, device=feat_mean_stack.device)
-    triplet_loss = torch.relu(pos_dist - min_neg_dist + margin)
-    loss = triplet_loss.mean()
-    return loss
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch_geometric.nn import EdgeConv, knn
+from torch_cluster import fps, knn_graph
+from torch.nn import Sequential, Linear, ReLU
+import time
+import argparse 
 
-# class GNNFeatureExtractor(nn.Module):
-#     def __init__(self, in_channels=6, hidden_channels=32, out_channels=6, k=9):
+###### nearest 
+class EdgeConvFeatureEnhancer(nn.Module):
+    def __init__(self, in_channels, out_channels, k=5, sampling_ratio=0.1, interp_k=3):
+        super().__init__()
+        self.k = k
+        self.sampling_ratio = sampling_ratio  # 采样率 0.1
+        self.interp_k = interp_k  # 近邻插值用的 k
+        self.edge_conv = EdgeConv(Sequential(
+            Linear(2 * in_channels, out_channels),
+            ReLU(),
+            Linear(out_channels, out_channels)
+        ))
+        self.sample_idx = None
+        self.sampled_pos = None
+        self.edge_index = None
+        self.interp_assign_index = None
+
+    def precompute_sampling_and_graph(self, pos):
+        # 采样 10% 的点
+        self.sample_idx = fps(pos, ratio=self.sampling_ratio)
+        self.sampled_pos = pos[self.sample_idx]
+        self.edge_index = knn_graph(self.sampled_pos, k=self.k)
+
+        # 计算插值索引，确保不越界
+        assign_index = knn(self.sampled_pos, pos, k=self.interp_k)  # [2, N * interp_k]
+        valid_mask = (assign_index[0] < self.sampled_pos.size(0)) & (assign_index[1] < pos.size(0))
+        self.interp_assign_index = assign_index[:, valid_mask]
+
+    def interpolate_features(self, sampled_feats, init_feats):
+        if self.interp_assign_index is None:
+            raise ValueError("请先调用 precompute_sampling_and_graph 方法。")
+
+        # 初始化输出特征为原始特征
+        full_feats = init_feats.clone()
+
+        # 插值：直接用最近邻采样点的特征赋值（简单加权平均）
+        interp_feats = sampled_feats[self.interp_assign_index[0]]
+        full_feats.scatter_(0, self.interp_assign_index[1].unsqueeze(1).expand(-1, sampled_feats.size(1)), interp_feats)
+
+        # 采样点用 GNN 增强特征
+        full_feats[self.sample_idx] = sampled_feats
+        return full_feats
+
+    def forward(self, init_feats):
+        if self.sample_idx is None:
+            raise ValueError("请先调用 precompute_sampling_and_graph 方法。")
+
+        # 10% 的采样点用 GNN 增强
+        sampled_feats = init_feats[self.sample_idx]
+        enhanced_sampled_feats = self.edge_conv(sampled_feats, self.edge_index)
+
+        # 其余 90% 的点通过插值赋值
+        full_feats = self.interpolate_features(enhanced_sampled_feats, init_feats)
+        return full_feats
+
+import torch
+import torch.nn as nn
+from torch.nn import Linear, Sequential
+import torch.nn.functional as F
+from torch_geometric.nn import PointNetConv, fps, knn_graph, knn
+
+class PointNetFeatureEnhancer(nn.Module):
+    def __init__(self, in_channels, out_channels, k=5, sampling_ratio=0.1):
+        super().__init__()
+        self.k = k
+        self.sampling_ratio = sampling_ratio
+        self.pointnet_conv = PointNetConv(local_nn=Sequential(
+            Linear(in_channels + 3, 16),
+            nn.ReLU(),
+            Linear(16, out_channels)
+        ))
+        self.sampled_indices = None
+        self.sampled_pos = None
+        self.edge_index = None
+        self.nearest_sampled_indices = None
+
+    def precompute_sampling_and_graph(self, pos):
+        N = pos.size(0)  # 动态获取总点数，例如 1024053
+        # 1. FPS 采样 1/10 的点
+        self.sampled_indices = fps(pos, ratio=self.sampling_ratio)  # [M]，例如 5121
+        self.sampled_pos = pos[self.sampled_indices]  # [M, 3]
+        M = self.sampled_pos.size(0)  # 采样点数，例如 5121
+
+        # 2. 对采样点构建 k-NN 图
+        self.edge_index = knn_graph(self.sampled_pos, k=self.k)  # [2, M*k]
+
+        # 3. 为每个原始点在采样点中找最近的点
+        nearest_indices = knn(self.sampled_pos, pos, k=1)  # [2, N]，例如 [2, 1024053]
+        self.nearest_sampled_indices = nearest_indices[1]  # [N]，应在 [0, M-1]，例如 [0, 5120]
+
+    # def interpolate_features(self, enhanced_sampled_feats, init_feats):
+    #     if self.nearest_sampled_indices is None:
+    #         raise ValueError("请先调用 precompute_sampling_and_graph 方法。")
+        
+    #     # 初始化全点特征并 detach
+    #     full_feats = init_feats.detach().clone()  # [N, out_channels]，例如 [1024053, 16]
+
+    #     # 4. 对所有点赋值最近采样点的增强特征
+    #     full_feats.copy_(enhanced_sampled_feats[self.nearest_sampled_indices].detach())  # [N, out_channels]
+
+    #     # 5. 保留采样点的梯度
+    #     full_feats[self.sampled_indices] = enhanced_sampled_feats  # [M, out_channels]
+    #     return full_feats
+    def interpolate_features(self, enhanced_sampled_feats, pos):
+        if self.nearest_sampled_indices is None:
+            raise ValueError("请先调用 precompute_sampling_and_graph 方法。")
+        
+        N = pos.size(0)  # 1024053
+        out_channels = enhanced_sampled_feats.size(1)  # 6
+        full_feats = torch.zeros(N, out_channels, device=enhanced_sampled_feats.device)  # [1024053, 6]
+        
+        # 赋值最近采样点的增强特征
+        full_feats.copy_(enhanced_sampled_feats[self.nearest_sampled_indices])  # [1024053, 6]
+        
+        # 保留采样点的梯度
+        full_feats[self.sampled_indices] = enhanced_sampled_feats  # [M, 6]
+        return full_feats
+
+    def forward(self, init_feats):
+        if self.sampled_indices is None:
+            raise ValueError("请先调用 precompute_sampling_and_graph 方法。")
+        
+        # 提取采样点的初始特征
+        sampled_feats = init_feats[self.sampled_indices]  # [M, in_channels]，例如 [5121, 6]
+
+        # 用 PointNetConv 增强采样点特征
+        enhanced_sampled_feats = self.pointnet_conv(sampled_feats, self.sampled_pos, self.edge_index)  # [M, out_channels]，例如 [5121, 16]
+        # 扩散到所有点
+        full_feats = self.interpolate_features(enhanced_sampled_feats, init_feats)
+        return full_feats
+
+# #######################################
+# class EdgeConvFeatureEnhancer(nn.Module):
+#     def __init__(self, in_channels, out_channels, k=5, sampling_ratio=0.1):
 #         super().__init__()
 #         self.k = k
-#         self.conv1 = PointNetConv(local_nn=nn.Linear(3 + in_channels, hidden_channels))
-#         self.conv2 = PointNetConv(local_nn=nn.Linear(3 + hidden_channels, out_channels))
-#         self.alpha = nn.Parameter(torch.ones(1, out_channels) * 0.5)
-#         nn.init.xavier_uniform_(self.conv1.local_nn.weight)
-#         nn.init.zeros_(self.conv1.local_nn.bias)
-#         nn.init.xavier_uniform_(self.conv2.local_nn.weight)
-#         nn.init.zeros_(self.conv2.local_nn.bias)
+#         self.sampling_ratio = sampling_ratio
+#         # EdgeConv 使用经典的 2 * in_channels 输入
+#         self.edge_conv = EdgeConv(Sequential(
+#             Linear(2 * in_channels, out_channels),
+#             ReLU(),
+#             Linear(out_channels, out_channels)
+#         ))
+#         self.sample_idx = None
+#         self.sampled_pos = None
 #         self.edge_index = None
 
-#     def precompute_knn(self, pos):
-#         # FPS 采样 50% 的点，减少计算量
-#         sample_idx = fps(pos, ratio=0.4)
-#         sampled_pos = pos[sample_idx]
-#         self.edge_index = knn_graph(sampled_pos, k=self.k, loop=False)
-#         self.sample_idx = sample_idx
+#     def precompute_sampling_and_graph(self, pos):
+#         # 最远点采样 (FPS)
+#         self.sample_idx = fps(pos, ratio=self.sampling_ratio)
+#         self.sampled_pos = pos[self.sample_idx]
+#         # k-NN 图构建
+#         self.edge_index = knn_graph(self.sampled_pos, k=self.k)
+#         # 打印调试信息
+#         print(f"Sampled points: {self.sampled_pos.shape[0]}, Edges: {self.edge_index.shape[1]}")
 
-#     def forward(self, pos, initial_feats):
-#         if self.edge_index is None:
-#             raise ValueError("请先调用 precompute_knn 方法预计算 KNN 图")
-        
-#         # 采样输入特征
-#         sampled_feats = initial_feats[self.sample_idx]
-#         sampled_pos = pos[self.sample_idx]
-        
-#         # 两层 GNN 计算
-#         data = Data(x=sampled_feats, pos=sampled_pos, edge_index=self.edge_index)
-#         x = F.relu(self.conv1(data.x, data.pos, data.edge_index))
-#         enhanced_feats = self.conv2(x, data.pos, data.edge_index)
-        
-#         # 插值回全点云
-#         full_enhanced_feats = torch.zeros_like(initial_feats)
-#         full_enhanced_feats[self.sample_idx] = enhanced_feats
-        
-#         return full_enhanced_feats
+#     def forward(self, init_feats):
+#         if self.sample_idx is None or self.sampled_pos is None or self.edge_index is None:
+#             raise ValueError("请先调用 precompute_sampling_and_graph 方法进行采样和图构建预计算。")
+#         # 提取采样点的特征
+#         sampled_feats = init_feats[self.sample_idx]
+#         # EdgeConv 处理
+#         x = self.edge_conv(sampled_feats, self.edge_index)
+#         # 将增强特征映射回原始点集
+#         full_feats = init_feats.clone()
+#         full_feats[self.sample_idx] = x
+#         return full_feats
 
-import torch_scatter
-class GNNFeatureExtractor(nn.Module):
-    def __init__(self, in_channels=6, hidden_channels=32, out_channels=6, k=5):
-        super().__init__()
-        self.k = k  # KNN for interpolation and graph
-        self.conv1 = PointNetConv(local_nn=nn.Linear(3 + in_channels, hidden_channels))
-        self.conv2 = PointNetConv(local_nn=nn.Linear(3 + hidden_channels, out_channels))
-        nn.init.xavier_uniform_(self.conv1.local_nn.weight)
-        nn.init.zeros_(self.conv1.local_nn.bias)
-        nn.init.xavier_uniform_(self.conv2.local_nn.weight)
-        nn.init.zeros_(self.conv2.local_nn.bias)
-        self.edge_index = None
-        self.sample_idx = None
-        self.interpolation_indices = None
-
-    def precompute_knn(self, pos):
-        # FPS sampling
-        self.sample_idx = fps(pos, ratio=0.1)  # Adjust ratio as needed (e.g., 0.05 for more memory efficiency)
-        sampled_pos = pos[self.sample_idx]
-        
-        # Build KNN graph for sampled points
-        self.edge_index = knn_graph(sampled_pos, k=self.k, loop=False)
-        
-        # Compute interpolation indices using faiss
-        sampled_pos_np = sampled_pos.cpu().numpy()
-        index = faiss.IndexFlatL2(3)  # 3D coordinates
-        index.add(sampled_pos_np)
-        
-        # Find k nearest sampled points for each point in pos
-        pos_np = pos.cpu().numpy()
-        _, I = index.search(pos_np, self.k)  # I contains indices of k nearest neighbors
-        self.interpolation_indices = torch.from_numpy(I).to(pos.device)
-
-    def forward(self, pos, initial_feats):
-        if self.edge_index is None or self.interpolation_indices is None:
-            raise ValueError("Please call precompute_knn first")
-        
-        # Sample features
-        sampled_feats = initial_feats[self.sample_idx]
-        sampled_pos = pos[self.sample_idx]
-        
-        # GNN on sampled points
-        data = Data(x=sampled_feats, pos=sampled_pos, edge_index=self.edge_index)
-        x = F.relu(self.conv1(data.x, data.pos, data.edge_index))
-        enhanced_feats = self.conv2(x, data.pos, data.edge_index)
-        
-        # Interpolate to full point cloud
-        # Flatten indices for scatter operation
-        indices = self.interpolation_indices.view(-1)  # [N_pts * k]
-        point_ids = torch.arange(pos.size(0), device=pos.device).view(-1, 1).repeat(1, self.k).view(-1)  # [N_pts * k]
-        
-        # Gather features of nearest neighbors
-        gathered = enhanced_feats[indices]  # [N_pts * k, C]
-        
-        # Scatter and mean to interpolate
-        interpolated = torch_scatter.scatter_mean(gathered, point_ids, dim=0, dim_size=pos.size(0))  # [N_pts, C]
-        
-        return interpolated
 
 
 # MLP
@@ -356,8 +474,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     # ins_feat_kmeans = DBSCAN_Clustering()
     ins_feat_kmeans = HDBSCAN_Clustering()
     # 使用 GNN
-    gnn = GNNFeatureExtractor(k=16).cuda()
-    # optimizer = torch.optim.AdamW([
+    # gnn = EdgeConvFeatureEnhancer(in_channels=6, out_channels=6, k=24, sampling_ratio=0.1).cuda()    # optimizer = torch.optim.AdamW([
+    gnn = PointNetFeatureEnhancer(in_channels=9, out_channels=6, k=16, sampling_ratio=0.1).cuda()
     #     {'params': gnn.parameters()}
     # ], lr=5e-4, weight_decay=0.01)  # AdamW优化器
     # scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
@@ -368,7 +486,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     # )
     optimizer = torch.optim.Adam([
     {'params': gnn.parameters()}
-        ], lr=1e-3)  
+        ], lr=1e-4)  
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=500, gamma=0.9)
 
 
@@ -467,16 +585,23 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         if iteration >= 30001:
             if iteration == 30001:
                 start = time.time()
-                gnn.precompute_knn(gaussians._xyz.detach())
+                gnn.precompute_sampling_and_graph(gaussians._xyz.detach())
                 print(f"Precompute KNN: {time.time() - start:.2f} seconds")
-            ins_feat = gaussians._ins_feat
-            ins_feat_norm = (ins_feat - ins_feat.mean(dim=0, keepdim=True)) / (ins_feat.std(dim=0, keepdim=True) + 1e-6)
-
-            enhanced_feats = gnn(gaussians._xyz.detach(), ins_feat_norm)
+            color_feats = gaussians._features_dc.squeeze(1).detach()  # [1024053, 3]
+            init_feats = torch.cat((gaussians._ins_feat, color_feats), dim=1)
+            ins_feat = init_feats
+            ins_feat_norm = (ins_feat - ins_feat.mean(dim=0, keepdim=True)) / (ins_feat.std(dim=0, keepdim=True) + 1e-10)
+            enhanced_feats = gnn(ins_feat_norm)
             enhanced_feats_norm = (enhanced_feats - enhanced_feats.mean(dim=0, keepdim=True)) / \
-                                (enhanced_feats.std(dim=0, keepdim=True) + 1e-6)
+                                (enhanced_feats.std(dim=0, keepdim=True) + 1e-10)
+            final_feats = enhanced_feats_norm + gaussians._ins_feat
 
-            final_feats = ins_feat_norm + enhanced_feats_norm
+            # ins_feat = gaussians._ins_feat
+            # ins_feat_norm = (ins_feat - ins_feat.mean(dim=0, keepdim=True)) / (ins_feat.std(dim=0, keepdim=True) + 1e-10)
+            # enhanced_feats = gnn(ins_feat_norm)
+            # enhanced_feats_norm = (enhanced_feats - enhanced_feats.mean(dim=0, keepdim=True)) / \
+            #                     (enhanced_feats.std(dim=0, keepdim=True) + 1e-10)
+            # final_feats = enhanced_feats_norm + ins_feat_norm
         else:
             final_feats = gaussians._ins_feat
 
@@ -537,17 +662,19 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             #           LERF 3W-4W steps; ScanNet 3w-5w steps #
             #           see Sec.3.1 in the paper              #
             # #################################################
-            if cb_mode is None:
-                # # (0) compute the average instance features within each mask. [num_mask, 6]
-                feat_mean_stack = mask_feature_mean(rendered_ins_feat, mask_bool, image_mask=rendered_silhouette)
-                # # (1) intra-mask smoothing loss. Eq.(1) in the paper
-                loss_cohesion = cohesion_loss(rendered_ins_feat, mask_bool, feat_mean_stack)
-                # # (2) inter-mask contrastive loss Eq.(2) in the paper
-                loss_separation = separation_loss(feat_mean_stack, iteration)
-                # loss_separation = separation_loss(rendered_ins_feat, mask_bool, feat_mean_stack, iteration)
+            ##############
+            ##############    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            ##############
 
+            if cb_mode is None:
+                # (0) compute the average instance features within each mask. [num_mask, 6]
+                feat_mean_stack = mask_feature_mean(rendered_ins_feat, mask_bool, image_mask=rendered_silhouette)
+
+                # loss = nt_xent_loss(feat_mean_stack, temperature=0.01) 
+                # lambda_weight = min(1, (iteration-30000) / 10000 * 1)
+                # loss = nt_xent_loss(feat_mean_stack, temperature=0.1) 
+                loss = separation_loss(feat_mean_stack) + 0.1*cohesion_loss(rendered_ins_feat, mask_bool, feat_mean_stack)
                 
-                loss = loss_separation + opt.loss_weight * loss_cohesion
 
                
                 # loss = infonce_loss(feat_mean_stack)
@@ -586,10 +713,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         #             loss += feat_loss
 
         # mask loss. modify -----
-        if viewpoint_cam.original_mask is not None:
-            gt_mask = viewpoint_cam.original_mask.cuda()
-            mask_loss = F.mse_loss(alpha, gt_mask)
-            loss = loss + mask_loss
+        # if viewpoint_cam.original_mask is not None:
+        #     gt_mask = viewpoint_cam.original_mask.cuda()
+        #     mask_loss = F.mse_loss(alpha, gt_mask)
+        #     loss = loss + mask_loss
         
         if no_need_bk == False:
             loss.backward()
@@ -598,7 +725,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             # print(f"final feats std: {final_feats.std(dim=0)}")
             gaussians._ins_feat = final_feats
             # print(f"ins_feat2 std: {gaussians._ins_feat.std(dim=0)}")
-            ins_feat_kmeans.forward(gaussians)   # note: position weight
+            start_t = time.perf_counter()
+            ins_feat_kmeans.forward(gaussians)  # note: position weight
+            clustering_time = time.perf_counter() - start_t
+            print(f'Clustering time: {clustering_time:.2f} seconds')
         iter_end.record()
 
         # Save the intermediate training results. [OpenGaussian]

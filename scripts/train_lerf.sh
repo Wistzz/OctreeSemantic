@@ -14,10 +14,37 @@ conda activate opengs
 # --pos_weight 0.5
 # --save_memory: Saves memory, but will reduce training speed. If your GPU memory > 24GB, you can omit this flag
 ##############################################
-scan="figurines"
-gpu_num=6 # change
+# scan="figurines"
+# gpu_num=0 # change
+# echo "Training for ${scan} ....."
+# CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 500$gpu_num \
+#     -s /data/sunwei/OpenGaussian/data/lerf_ovs/${scan} \
+#     --iterations 40000 \
+#     --start_ins_feat_iter 30000 \
+#     --start_root_cb_iter 40000 \
+#     --start_leaf_cb_iter 50000 \
+#     --sam_level 3 \
+#     --cluster_num 256 \
+#     --pos_weight 0.5 \
+#     --save_memory \
+#     --test_iterations 30000 \
+#     --spatial_grid_size 2.0 \
+#     --eval \
+#     --start_checkpoint /data/sunwei/gaussian-splatting/output/d8bf0888-b/chkpnt30000.pth #/data/sunwei/gaussian-splatting/output/0ceaef48-b/chkpnt30000.pth
+
+
+# # ###############################################
+# # #              (2/4) waldo_kitchen
+# # # Training takes approximately 60 minutes on a 24G 4090 GPU.
+# # # Good point cloud visualization result (recommended), suboptimal object selection effect.
+# # # k1=64, k2=10
+# # # --pos_weight 0.5
+# # # No need to set save_memory, 24G is sufficient.
+# # ###############################################
+# scan="waldo_kitchen"
+gpu_num=1           # change
 echo "Training for ${scan} ....."
-CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 500$gpu_num \
+CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 601$gpu_num \
     -s /data/sunwei/OpenGaussian/data/lerf_ovs/${scan} \
     --iterations 40000 \
     --start_ins_feat_iter 30000 \
@@ -30,33 +57,6 @@ CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 500$gpu_num \
     --test_iterations 30000 \
     --spatial_grid_size 2.0 \
     --eval \
-    --start_checkpoint /data/sunwei/gaussian-splatting/output/figurines/chkpnt30000.pth
-    
-
-
-# # ###############################################
-# # #              (2/4) waldo_kitchen
-# # # Training takes approximately 60 minutes on a 24G 4090 GPU.
-# # # Good point cloud visualization result (recommended), suboptimal object selection effect.
-# # # k1=64, k2=10
-# # # --pos_weight 0.5
-# # # No need to set save_memory, 24G is sufficient.
-# # ###############################################
-# scan="waldo_kitchen"
-# gpu_num=3           # change
-# echo "Training for ${scan} ....."
-# CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 601$gpu_num \
-#     -s /gdata/cold1/wuyanmin/OpenGaussian/data/lerf_ovs/${scan} \
-#     --iterations 70_000 \
-#     --start_ins_feat_iter 30_000 \
-#     --start_root_cb_iter 40_000 \
-#     --start_leaf_cb_iter 50_000 \
-#     --sam_level 3 \
-#     --root_node_num 64 \
-#     --leaf_node_num 10 \
-#     --pos_weight 0.5 \
-#     --test_iterations 30000 \
-#     --eval
 
 
 ###############################################
@@ -70,18 +70,18 @@ CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 500$gpu_num \
 # gpu_num=3       # change
 # echo "Training for ${scan} ....."
 # CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 603$gpu_num \
-#     -s /data/sunwei/OpenGaussian/data/teatime/ \
-#     --iterations 70_000 \
-#     --start_ins_feat_iter 30_000 \
-#     --start_root_cb_iter 40_000 \
-#     --start_leaf_cb_iter 50_000 \
+#     -s /data/sunwei/OpenGaussian/data/lerf_ovs/${scan} \
+#     --iterations 40000 \
+#     --start_ins_feat_iter 30000 \
+#     --start_root_cb_iter 40000 \
+#     --start_leaf_cb_iter 50000 \
 #     --sam_level 3 \
-#     --root_node_num 32 \
-#     --leaf_node_num 10 \
-#     --pos_weight 0.1 \
+#     --cluster_num 256 \
+#     --pos_weight 0.5 \
 #     --save_memory \
 #     --test_iterations 30000 \
-#     --eval
+#     --spatial_grid_size 2.0 \
+#     --eval \
 
 
 # ###############################################
@@ -98,17 +98,17 @@ CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 500$gpu_num \
 # echo "Training for ${scan} ....."
 # CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 602$gpu_num \
 #     -s /data/sunwei/OpenGaussian/data/lerf_ovs/${scan} \
-#     --iterations 70_000 \
-#     --start_ins_feat_iter 30_000 \
-#     --start_root_cb_iter 40_000 \
-#     --start_leaf_cb_iter 50_000 \
+#     --iterations 40000 \
+#     --start_ins_feat_iter 30000 \
+#     --start_root_cb_iter 40000 \
+#     --start_leaf_cb_iter 50000 \
 #     --sam_level 3 \
-#     --root_node_num 64 \
-#     --leaf_node_num 10 \
+#     --cluster_num 256 \
 #     --pos_weight 0.5 \
-#     --loss_weight 0.01 \
+#     --save_memory \
 #     --test_iterations 30000 \
-#     --eval
+#     --spatial_grid_size 2.0 \
+#     --eval \
 
 
 # scan="IMG_8304"

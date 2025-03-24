@@ -4,149 +4,149 @@ import numpy as np
 from torch_scatter import scatter_mean
 
 
-class ClassicKMeans():
-    def __init__(self, num_clusters=100, num_iters=100, dim=9, batch_size=1000):
-        self.num_clusters = num_clusters  # 聚类的数量
-        self.num_iters = num_iters  # K-Means 迭代次数
-        self.vec_dim = dim  # 特征维度
-        self.centers = torch.empty(0)  # 聚类中心，形状为 [num_clusters, dim]
-        self.cls_ids = torch.empty(0)  # 每个样本的聚类 ID，形状为 [num_pts]
-        self.batch_size = batch_size
+# class ClassicKMeans():
+#     def __init__(self, num_clusters=100, num_iters=100, dim=9, batch_size=1000):
+#         self.num_clusters = num_clusters  # 聚类的数量
+#         self.num_iters = num_iters  # K-Means 迭代次数
+#         self.vec_dim = dim  # 特征维度
+#         self.centers = torch.empty(0)  # 聚类中心，形状为 [num_clusters, dim]
+#         self.cls_ids = torch.empty(0)  # 每个样本的聚类 ID，形状为 [num_pts]
+#         self.batch_size = batch_size
 
-    def get_dist(self, x, y, mode='sq_euclidean'):
-        """计算 x 中所有向量与 y 中所有向量之间的距离。
+#     def get_dist(self, x, y, mode='sq_euclidean'):
+#         """计算 x 中所有向量与 y 中所有向量之间的距离。
 
-        x: (m, dim)
-        y: (n, dim)
-        dist: (m, n)
-        """
-        if mode == 'sq_euclidean':
-            num_batches = int(np.ceil(x.shape[0] / self.batch_size))
-            dist_list = []
-            for i in range(num_batches):
-                start = i * self.batch_size
-                end = min((i + 1) * self.batch_size, x.shape[0])
-                batch_x = x[start:end]
-                with torch.no_grad():
-                    batch_dist = torch.cdist(batch_x, y)
-                dist_list.append(batch_dist)
-            dist = torch.cat(dist_list, dim=0)
-        return dist
+#         x: (m, dim)
+#         y: (n, dim)
+#         dist: (m, n)
+#         """
+#         if mode == 'sq_euclidean':
+#             num_batches = int(np.ceil(x.shape[0] / self.batch_size))
+#             dist_list = []
+#             for i in range(num_batches):
+#                 start = i * self.batch_size
+#                 end = min((i + 1) * self.batch_size, x.shape[0])
+#                 batch_x = x[start:end]
+#                 with torch.no_grad():
+#                     batch_dist = torch.cdist(batch_x, y)
+#                 dist_list.append(batch_dist)
+#             dist = torch.cat(dist_list, dim=0)
+#         return dist
 
-    def cluster_assign(self, feat):
-        """执行 K-Means 聚类。
+#     def cluster_assign(self, feat):
+#         """执行 K-Means 聚类。
 
-        feat: (num_pts, dim)
-        """
-        # 初始化聚类中心
-        if len(self.centers) == 0:
-            with torch.no_grad():
-                self.centers = feat[torch.randperm(feat.shape[0])[:self.num_clusters], :]
+#         feat: (num_pts, dim)
+#         """
+#         # 初始化聚类中心
+#         if len(self.centers) == 0:
+#             with torch.no_grad():
+#                 self.centers = feat[torch.randperm(feat.shape[0])[:self.num_clusters], :]
 
-        for iteration in range(self.num_iters):
-            # 计算每个样本到所有聚类中心的距离
-            with torch.no_grad():
-                dist = self.get_dist(feat, self.centers)
-            # 分配样本到最近的聚类中心
-            self.cls_ids = torch.argmin(dist, dim=-1)
+#         for iteration in range(self.num_iters):
+#             # 计算每个样本到所有聚类中心的距离
+#             with torch.no_grad():
+#                 dist = self.get_dist(feat, self.centers)
+#             # 分配样本到最近的聚类中心
+#             self.cls_ids = torch.argmin(dist, dim=-1)
 
-            # 更新聚类中心
-            for i in range(self.num_clusters):
-                cluster_points = feat[self.cls_ids == i]
-                if len(cluster_points) > 0:
-                    with torch.no_grad():
-                        self.centers[i] = torch.mean(cluster_points, dim=0)
+#             # 更新聚类中心
+#             for i in range(self.num_clusters):
+#                 cluster_points = feat[self.cls_ids == i]
+#                 if len(cluster_points) > 0:
+#                     with torch.no_grad():
+#                         self.centers[i] = torch.mean(cluster_points, dim=0)
 
-    def forward(self, gaussian, pos_weight=1.0):
-        # 合并特征和坐标信息
-        scale = pos_weight
-        with torch.no_grad():
-            xyz_feat = gaussian._xyz * scale
-            feat = torch.cat((gaussian._ins_feat, xyz_feat), dim=1)  # [N, 9]
+#     def forward(self, gaussian, pos_weight=1.0):
+#         # 合并特征和坐标信息
+#         scale = pos_weight
+#         with torch.no_grad():
+#             xyz_feat = gaussian._xyz * scale
+#             feat = torch.cat((gaussian._ins_feat, xyz_feat), dim=1)  # [N, 9]
 
-        # 执行 K-Means 聚类
-        self.cluster_assign(feat)
-
-
+#         # 执行 K-Means 聚类
+#         self.cluster_assign(feat)
 
 
 
 
 
-import torch
-import numpy as np
-from sklearn.cluster import DBSCAN
 
-class DBSCAN_Clustering:
-    def __init__(self, batch_size=1000):
-        self.centers = torch.empty(0)
-        self.cls_ids = torch.empty(0)
-        self.eps = 0.5
-        self.min_samples = 500
-        self.batch_size = batch_size
 
-    def get_dist(self, x, y, mode='sq_euclidean'):
-        """计算 x 中所有向量与 y 中所有向量之间的距离。
+# import torch
+# import numpy as np
+# from sklearn.cluster import DBSCAN
 
-        x: (m, dim)
-        y: (n, dim)
-        dist: (m, n)
-        """
-        if mode == 'sq_euclidean':
-            num_batches = int(np.ceil(x.shape[0] / self.batch_size))
-            dist_list = []
-            for i in range(num_batches):
-                start = i * self.batch_size
-                end = min((i + 1) * self.batch_size, x.shape[0])
-                batch_x = x[start:end]
-                with torch.no_grad():
-                    batch_dist = torch.cdist(batch_x, y)
-                dist_list.append(batch_dist)
-            dist = torch.cat(dist_list, dim=0)
-        return dist
+# class DBSCAN_Clustering:
+#     def __init__(self, batch_size=1000):
+#         self.centers = torch.empty(0)
+#         self.cls_ids = torch.empty(0)
+#         self.eps = 0.5
+#         self.min_samples = 500
+#         self.batch_size = batch_size
 
-    def cluster_assign(self, feat):
-        """执行 DBSCAN 聚类。
+#     def get_dist(self, x, y, mode='sq_euclidean'):
+#         """计算 x 中所有向量与 y 中所有向量之间的距离。
 
-        feat: (num_pts, dim)
-        """
-        # DBSCAN聚类
-        feat_np = feat.cpu().numpy()
-        dbscan = DBSCAN(eps=self.eps, min_samples=self.min_samples)  # 参数需调整
-        labels = dbscan.fit_predict(feat_np)
+#         x: (m, dim)
+#         y: (n, dim)
+#         dist: (m, n)
+#         """
+#         if mode == 'sq_euclidean':
+#             num_batches = int(np.ceil(x.shape[0] / self.batch_size))
+#             dist_list = []
+#             for i in range(num_batches):
+#                 start = i * self.batch_size
+#                 end = min((i + 1) * self.batch_size, x.shape[0])
+#                 batch_x = x[start:end]
+#                 with torch.no_grad():
+#                     batch_dist = torch.cdist(batch_x, y)
+#                 dist_list.append(batch_dist)
+#             dist = torch.cat(dist_list, dim=0)
+#         return dist
+
+#     def cluster_assign(self, feat):
+#         """执行 DBSCAN 聚类。
+
+#         feat: (num_pts, dim)
+#         """
+#         # DBSCAN聚类
+#         feat_np = feat.cpu().numpy()
+#         dbscan = DBSCAN(eps=self.eps, min_samples=self.min_samples)  # 参数需调整
+#         labels = dbscan.fit_predict(feat_np)
         
-        # 处理噪声点（labels为-1）
-        noise_mask = labels == -1
-        if np.any(noise_mask):
-            labels[noise_mask] = -1  # 噪声点保持-1
+#         # 处理噪声点（labels为-1）
+#         noise_mask = labels == -1
+#         if np.any(noise_mask):
+#             labels[noise_mask] = -1  # 噪声点保持-1
         
-        # 计算聚类中心
-        unique_labels = np.unique(labels[labels != -1])
-        centers = []
-        for label in unique_labels:
-            cluster_points = feat_np[labels == label]
-            center = np.mean(cluster_points, axis=0)
-            centers.append(center)
+#         # 计算聚类中心
+#         unique_labels = np.unique(labels[labels != -1])
+#         centers = []
+#         for label in unique_labels:
+#             cluster_points = feat_np[labels == label]
+#             center = np.mean(cluster_points, axis=0)
+#             centers.append(center)
         
-        # 更新属性
-        if centers:
-            self.centers = torch.tensor(centers, device=feat.device)
-            self.cls_ids = torch.tensor(labels, device=feat.device, dtype=torch.long)
-        else:
-            self.centers = torch.empty(0, device=feat.device)
-            self.cls_ids = torch.full((feat.size(0),), -1, device=feat.device, dtype=torch.long)
+#         # 更新属性
+#         if centers:
+#             self.centers = torch.tensor(centers, device=feat.device)
+#             self.cls_ids = torch.tensor(labels, device=feat.device, dtype=torch.long)
+#         else:
+#             self.centers = torch.empty(0, device=feat.device)
+#             self.cls_ids = torch.full((feat.size(0),), -1, device=feat.device, dtype=torch.long)
 
-    def forward(self, gaussian, pos_weight=1.0):
-        # 合并特征和坐标信息
-        scale = pos_weight
-        with torch.no_grad():
-            xyz_feat = gaussian._xyz * scale
-            # xyz_norm = (xyz - xyz.mean(dim=0)) / (xyz.std(dim=0) + 1e-6)  # 归一化位置
-            # feat_norm = (feat - feat.mean(dim=0)) / (feat.std(dim=0) + 1e-6)  # 归一化特征
-            feat = torch.cat((gaussian._ins_feat, xyz_feat), dim=1)  # [N, 9]
+#     def forward(self, gaussian, pos_weight=1.0):
+#         # 合并特征和坐标信息
+#         scale = pos_weight
+#         with torch.no_grad():
+#             xyz_feat = gaussian._xyz * scale
+#             # xyz_norm = (xyz - xyz.mean(dim=0)) / (xyz.std(dim=0) + 1e-6)  # 归一化位置
+#             # feat_norm = (feat - feat.mean(dim=0)) / (feat.std(dim=0) + 1e-6)  # 归一化特征
+#             feat = torch.cat((gaussian._ins_feat, xyz_feat), dim=1)  # [N, 9]
 
-        # 执行 DBSCAN 聚类
-        self.cluster_assign(feat)
+#         # 执行 DBSCAN 聚类
+#         self.cluster_assign(feat)
 
 
 from hdbscan import HDBSCAN  # 需要安装 hdbscan: pip install hdbscan
@@ -155,8 +155,8 @@ class HDBSCAN_Clustering:
     def __init__(self, batch_size=1000):
         self.centers = torch.empty(0)  # 存储聚类中心
         self.cls_ids = torch.empty(0)  # 存储样本标签
-        self.min_cluster_size = 500  # HDBSCAN 的最小簇大小，类似于 min_samples
-        self.min_samples = 50        # 用于软聚类的参数，控制噪声点
+        self.min_cluster_size = 60 # HDBSCAN 的最小簇大小，类似于 min_samples （50-2000）
+        self.min_samples = 50        # 用于软聚类的参数，控制噪声点 （10-100）
         self.batch_size = batch_size
 
     def get_dist(self, x, y, mode='sq_euclidean'):
@@ -221,8 +221,18 @@ class HDBSCAN_Clustering:
         # 合并特征和坐标信息
         scale = pos_weight
         with torch.no_grad():
-            xyz_feat = gaussian._xyz * scale
-            feat = torch.cat((gaussian._ins_feat, xyz_feat), dim=1)  # [N, 9]
+            #特征标准化
+            feat_mean = gaussian._ins_feat.mean(dim=0, keepdim=True)
+            feat_std = gaussian._ins_feat.std(dim=0, keepdim=True)
+            ins = (gaussian._ins_feat - feat_mean) / (feat_std + 1e-10)
+
+            # 位置标准化
+            xyz_mean = gaussian._xyz.mean(dim=0, keepdim=True)
+            xyz_std = gaussian._xyz.std(dim=0, keepdim=True)
+            xyz = (gaussian._xyz - xyz_mean) / (xyz_std + 1e-10)
+
+            feat = torch.cat((ins, 0.01*xyz), dim=1)  # [N, 9]
+            # feat = xyz
 
         # 执行 HDBSCAN 聚类
         self.cluster_assign(feat)

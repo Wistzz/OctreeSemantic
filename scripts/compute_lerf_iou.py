@@ -69,5 +69,5 @@ if __name__ == "__main__":
     # TODO: change
     path_gt = "/data/sunwei/OpenGaussian/data/lerf_ovs/label/figurines/gt"
     # renders_cluster_silhouette is the predicted mask
-    path_pred = "/data/sunwei/OctreeSemantic/output/0.3/text2obj/ours_40000/renders_cluster_silhouette"
+    path_pred = "/data/sunwei/OctreeSemantic/output/600/text2obj/ours_40000/renders_cluster_silhouette"
     evalute(path_gt, path_pred, args.scene_name)
