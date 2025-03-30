@@ -95,6 +95,9 @@ class OptimizationParams(ParamGroup):
 
         parser.add_argument('--pos_weight', type=float, default=1.0)    # position weight for coarse codebook
         parser.add_argument('--loss_weight', type=float, default=1.0)   # loss_cohesion weight
+        parser.add_argument('--min_cluster_size', type=int, default=1000)   # loss_cohesion weight
+        parser.add_argument('--temp', type=float, default=0.05)
+
 
         parser.add_argument('--iterations', type=int, default=70_000)   # default 7w, scannet 9w
         parser.add_argument('--start_ins_feat_iter', type=int, default=30_000)  # default 3w
@@ -120,6 +123,8 @@ class OptimizationParams(ParamGroup):
         g.sam_level = args.sam_level
         g.spatial_grid_size = args.spatial_grid_size
         g.iterations = args.iterations
+        g.temp = args.temp
+        g.min_cluster_size = args.min_cluster_size
         g.start_ins_feat_iter = args.start_ins_feat_iter
         g.start_root_cb_iter = args.start_root_cb_iter
         g.start_leaf_cb_iter = args.start_leaf_cb_iter

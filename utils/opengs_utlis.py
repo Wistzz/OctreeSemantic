@@ -5,33 +5,82 @@ import os
 from bitarray import bitarray
 from collections import OrderedDict
 
+
 def calculate_pairwise_distances(tensor1, tensor2, metric=None):
     """
-    Calculate L1 (Manhattan) and L2 (Euclidean) distances between every pair of vectors
-    in two tensors of shape [m, 6] and [n, 6].
+    Calculate pairwise distances (L1, L2, and Cosine) between vectors in two tensors.
     Args:
         tensor1 (torch.Tensor): A tensor of shape [m, 6].
         tensor2 (torch.Tensor): Another tensor of shape [n, 6].
+        metric (str): "l1", "l2", "cosine", or None for all.
     Returns:
-        torch.Tensor: L1 distances of shape [m, n].
-        torch.Tensor: L2 distances of shape [m, n].
+        torch.Tensor: L1 distances of shape [m, n] or None.
+        torch.Tensor: L2 distances of shape [m, n] or None.
+        torch.Tensor: Cosine distances of shape [m, n] or None.
     """
-    # Reshape tensors to allow broadcasting
-    # tensor1 shape becomes [m, 1, 6] and tensor2 shape becomes [1, n, 6]
-    tensor1 = tensor1.unsqueeze(1)  # Now tensor1 is [m, 1, 6]
-    tensor2 = tensor2.unsqueeze(0)  # Now tensor2 is [1, n, 6]
-
-    # Compute the L1 distance
+    # L1 距离
     if metric == "l1":
-        return torch.abs(tensor1 - tensor2).sum(dim=2), None  # Result is [m, n]
+        tensor1_unsq = tensor1.unsqueeze(1)  # [m, 1, 6]
+        tensor2_unsq = tensor2.unsqueeze(0)  # [1, n, 6]
+        l1_distances = torch.abs(tensor1_unsq - tensor2_unsq).sum(dim=2)
+        return l1_distances, None, None
 
-    # Compute the L2 distance
+    # L2 距离
     if metric == "l2":
-        return None, torch.sqrt((tensor1 - tensor2).pow(2).sum(dim=2))  # Result is [m, n]
+        tensor1_unsq = tensor1.unsqueeze(1)  # [m, 1, 6]
+        tensor2_unsq = tensor2.unsqueeze(0)  # [1, n, 6]
+        l2_distances = torch.sqrt((tensor1_unsq - tensor2_unsq).pow(2).sum(dim=2))
+        return None, l2_distances, None
 
-    l1_distances = torch.abs(tensor1 - tensor2).sum(dim=2)
-    l2_distances = torch.sqrt((tensor1 - tensor2).pow(2).sum(dim=2))
-    return l1_distances, l2_distances
+    # 余弦距离
+    if metric == "cosine":
+        # 对特征进行 L2 归一化
+        tensor1_norm = F.normalize(tensor1, p=2, dim=1)  # [m, 6]
+        tensor2_norm = F.normalize(tensor2, p=2, dim=1)  # [n, 6]
+        # 计算余弦相似度
+        cosine_sim = torch.mm(tensor1_norm, tensor2_norm.t())  # [m, n]
+        # 计算余弦距离
+        cosine_distances = 1 - cosine_sim
+        return None, None, cosine_distances
+
+    # 默认返回所有距离
+    tensor1_unsq = tensor1.unsqueeze(1)  # [m, 1, 6]
+    tensor2_unsq = tensor2.unsqueeze(0)  # [1, n, 6]
+    l1_distances = torch.abs(tensor1_unsq - tensor2_unsq).sum(dim=2)
+    l2_distances = torch.sqrt((tensor1_unsq - tensor2_unsq).pow(2).sum(dim=2))
+    tensor1_norm = F.normalize(tensor1, p=2, dim=1)
+    tensor2_norm = F.normalize(tensor2, p=2, dim=1)
+    cosine_sim = torch.mm(tensor1_norm, tensor2_norm.t())
+    cosine_distances = 1 - cosine_sim
+    return l1_distances, l2_distances, cosine_distances
+
+# def calculate_pairwise_distances(tensor1, tensor2, metric=None):
+#     """
+#     Calculate L1 (Manhattan) and L2 (Euclidean) distances between every pair of vectors
+#     in two tensors of shape [m, 6] and [n, 6].
+#     Args:
+#         tensor1 (torch.Tensor): A tensor of shape [m, 6].
+#         tensor2 (torch.Tensor): Another tensor of shape [n, 6].
+#     Returns:
+#         torch.Tensor: L1 distances of shape [m, n].
+#         torch.Tensor: L2 distances of shape [m, n].
+#     """
+#     # Reshape tensors to allow broadcasting
+#     # tensor1 shape becomes [m, 1, 6] and tensor2 shape becomes [1, n, 6]
+#     tensor1 = tensor1.unsqueeze(1)  # Now tensor1 is [m, 1, 6]
+#     tensor2 = tensor2.unsqueeze(0)  # Now tensor2 is [1, n, 6]
+
+#     # Compute the L1 distance
+#     if metric == "l1":
+#         return torch.abs(tensor1 - tensor2).sum(dim=2), None  # Result is [m, n]
+
+#     # Compute the L2 distance
+#     if metric == "l2":
+#         return None, torch.sqrt((tensor1 - tensor2).pow(2).sum(dim=2))  # Result is [m, n]
+
+#     l1_distances = torch.abs(tensor1 - tensor2).sum(dim=2)
+#     l2_distances = torch.sqrt((tensor1 - tensor2).pow(2).sum(dim=2))
+#     return l1_distances, l2_distances
 
 def calculate_distances(tensor1, tensor2, metric=None):
     """

@@ -135,83 +135,71 @@ def cohesion_loss(feat_map, gt_mask, feat_mean_stack):
 import torch
 import torch.nn.functional as F
 
-
-#   infonce
-def separation_loss(feat_mean_stack, temperature=0.05):
+def separation_loss(feat_mean_stack, margin=1.0):
     N, C = feat_mean_stack.shape
     if N <= 1:
         return torch.tensor(0.0, device=feat_mean_stack.device)
-
-    feat_norm = F.normalize(feat_mean_stack, p=2, dim=1)
-    similarity_matrix = torch.matmul(feat_norm, feat_norm.T)  # [N, N]
-    pos_mask = torch.eye(N, dtype=torch.bool, device=feat_mean_stack.device)
-    neg_mask = ~pos_mask
-
-    pos_sim = similarity_matrix[pos_mask].view(N, 1)  # [N, 1]
-    neg_sim = similarity_matrix[neg_mask].view(N, N-1)  # [N, N-1]
-
-    exp_pos = torch.exp(pos_sim / temperature)
-    exp_neg = torch.exp(neg_sim / temperature)
-    neg_sum = exp_neg.sum(dim=1, keepdim=True)
-
-    loss = -torch.log(exp_pos / (neg_sum + 1e-10)).mean()
+    
+    # L2 归一化
+    feat_norm = F.normalize(feat_mean_stack, dim=1)
+    
+    # 计算距离矩阵
+    dist_matrix = torch.cdist(feat_norm, feat_norm)  # [N, N]
+    
+    # 设置对角线为无穷大，排除自身距离
+    mask = torch.eye(N, dtype=torch.bool, device=dist_matrix.device)
+    dist_matrix = dist_matrix.masked_fill(mask, float('inf'))
+    
+    # 找到每个实例的最小距离（即最难负样本）
+    min_dist = dist_matrix.min(dim=1)[0]  # [N]
+    
+    # 计算损失
+    loss = torch.clamp(margin - min_dist, min=0).mean()
+    
     return loss
 
-# def separation_loss(feat_mean_stack, iteration):
-#     """ inter-mask contrastive loss Eq.(2) in the paper
-#     Constrain the instance features within different masks to be as far apart as possible.
+# def separation_loss(feat_mean_stack, iteration, k=1):
 #     """
-#     N, _ = feat_mean_stack.shape
-
-#     # expand feat_mean_stack[N, 6] to [N, N, C]
-#     feat_expanded = feat_mean_stack.unsqueeze(1).expand(-1, N, -1)
-#     feat_transposed = feat_mean_stack.unsqueeze(0).expand(N, -1, -1)
-    
-#     # distance
-#     diff_squared = (feat_expanded - feat_transposed).pow(2).sum(2)
-    
-#     # Calculate the inverse of the distance to enhance discrimination
-#     epsilon = 1     # 1e-6
-#     inverse_distance = 1.0 / (diff_squared + epsilon)
-#     # Exclude diagonal elements (distance from itself) and calculate the mean inverse distance
-#     mask = torch.eye(N, device=feat_mean_stack.device).bool()
-#     inverse_distance.masked_fill_(mask, 0)  
-
-#     # note: weight
-#     # sorted by distance
-#     sorted_indices = inverse_distance.argsort().argsort()
-#     loss_weight = (sorted_indices.float() / (N - 1)) * (1.0 - 0.1) + 0.1    # scale to 0.1 - 1.0, [N, N]
-#     # small weight
-#     if iteration > 35_000:
-#         loss_weight[loss_weight < 0.9] = 0.1
-#     inverse_distance *= loss_weight     # [N, N]
-
-#     # final loss
-#     loss = inverse_distance.sum() / (N * (N - 1))
-
-#     return loss
-# def separation_loss(feat_mean_stack, iteration, margin=1.0):
+#     改进的分离损失函数，仅惩罚最难的样本对
+#     :param feat_mean_stack: [N, C] 特征均值矩阵
+#     :param iteration: 当前训练迭代次数
+#     :param k: 每个样本选择的最难负样本数量
+#     """
 #     N, C = feat_mean_stack.shape
-#     if N <= 1:
-#         return torch.tensor(0.0, device=feat_mean_stack.device)
     
-#     # L2 归一化
-#     feat_norm = F.normalize(feat_mean_stack, dim=1)
+#     # 计算所有样本对的平方距离
+#     diff = feat_mean_stack.unsqueeze(0) - feat_mean_stack.unsqueeze(1)
+#     dist_sq = torch.sum(diff ** 2, dim=2)  # [N, N]
     
-#     # 计算距离矩阵
-#     dist_matrix = torch.cdist(feat_norm, feat_norm)  # [N, N]
+#     # 排除自身样本对
+#     eye_mask = torch.eye(N, device=dist_sq.device).bool()
+#     dist_sq = dist_sq.masked_fill(eye_mask, float('inf'))
     
-#     # 设置对角线为无穷大，排除自身距离
-#     mask = torch.eye(N, dtype=torch.bool, device=dist_matrix.device)
-#     dist_matrix = dist_matrix.masked_fill(mask, float('inf'))
+#     # 为每个样本选择k个最难负样本（距离最小的）
+#     min_dist, min_indices = torch.topk(dist_sq, k=k, dim=1, largest=False)
     
-#     # 找到每个实例的最小距离（即最难负样本）
-#     min_dist = dist_matrix.min(dim=1)[0]  # [N]
+#     # 构造难例对掩码
+#     mask = torch.zeros_like(dist_sq, dtype=torch.bool)
+#     for i in range(N):
+#         mask[i, min_indices[i]] = True
+    
+#     # 计算难例对的逆距离
+#     epsilon = 1e-6
+#     inverse_dist = 1.0 / (dist_sq[mask] + epsilon)
+    
+#     # 动态权重调整
+#     if iteration > 35000:
+#         # 后期加强难例惩罚
+#         weights = 1.0 + 0.5 * (1.0 - (inverse_dist - inverse_dist.min()) / (inverse_dist.max() - inverse_dist.min()))
+#     else:
+#         # 前期均匀权重
+#         weights = torch.ones_like(inverse_dist)
     
 #     # 计算损失
-#     loss = torch.clamp(margin - min_dist, min=0).mean()
+#     loss = (inverse_dist * weights).mean()
     
 #     return loss
+
 
 import torch
 import torch.nn as nn
@@ -298,33 +286,9 @@ class PointNetFeatureEnhancer(nn.Module):
         self.edge_index = None
         self.nearest_sampled_indices = None
 
-    # def precompute_sampling_and_graph(self, pos):
-    #     N = pos.size(0)  # 动态获取总点数
-    #     print('total points: ', N)
-    #     target_num = 2e5 # 固定采样点数
-        
-    #     if N <= target_num:
-    #         # 点数不足，直接使用所有点
-    #         self.sampled_indices = torch.arange(N, dtype=torch.long, device=pos.device)
-    #         self.sampled_pos = pos
-    #         M = N
-    #     else:
-    #         # 进行随机采样到20万点
-    #         self.sampled_indices = torch.randperm(N, device=pos.device)[:int(target_num)]
-    #         self.sampled_pos = pos[self.sampled_indices]
-    #         M = self.sampled_pos.size(0)
-        
-    #     # 构建k-NN图
-    #     self.edge_index = knn_graph(self.sampled_pos, k=self.k)
-        
-    #     # 查找最近邻
-    #     nearest_indices = knn(self.sampled_pos, pos, k=1)
-    #     self.nearest_sampled_indices = nearest_indices[1]
-
     def precompute_sampling_and_graph(self, pos):
         N = pos.size(0)  # 动态获取总点数
-        print('total points: ', N)
-        target_num = 1e5 # 固定采样点数
+        target_num = 1e3 # 固定采样点数
         
         if N <= target_num:
             # 点数不足，直接使用所有点
@@ -374,22 +338,19 @@ class PointNetFeatureEnhancer(nn.Module):
 
     
 
-import torch
-import torch.nn as nn
-from torch.nn import Sequential, Linear
-from torch_cluster import fps, knn_graph, knn
-
-
 # class PointNetFeatureEnhancer(nn.Module):
-#     def __init__(self, in_channels, out_channels, k=5, sampling_ratio=0.1):
+#     def __init__(self, in_channels, out_channels, k=5, sampling_ratio=0.1, num_layers=2):
 #         super().__init__()
 #         self.k = k
 #         self.sampling_ratio = sampling_ratio
-#         self.pointnet_conv = nn.Sequential(
-#             Linear(in_channels + 3, 16),
-#             nn.ReLU(),
-#             Linear(16, 6)
-#         )
+#         self.num_layers = num_layers
+#         self.pointnet_convs = nn.ModuleList([
+#             PointNetConv(local_nn=Sequential(
+#                 Linear(in_channels + 3 if i == 0 else out_channels + 3, 16),
+#                 nn.ReLU(),
+#                 Linear(16, out_channels)
+#             )) for i in range(num_layers)
+#         ])
 #         self.sampled_indices = None
 #         self.sampled_pos = None
 #         self.edge_index = None
@@ -397,7 +358,7 @@ from torch_cluster import fps, knn_graph, knn
 
 #     def precompute_sampling_and_graph(self, pos):
 #         N = pos.size(0)  # 动态获取总点数
-#         target_num = 1e3#5  # 固定采样点数
+#         target_num = 1e5#5#100000  # 固定采样点数
 
 #         if N <= target_num:
 #             # 点数不足，直接使用所有点
@@ -417,24 +378,34 @@ from torch_cluster import fps, knn_graph, knn
 #         nearest_indices = knn(self.sampled_pos, pos, k=1)
 #         self.nearest_sampled_indices = nearest_indices[1]
 
+#     def interpolate_features(self, enhanced_sampled_feats, pos):
+#         if self.nearest_sampled_indices is None:
+#             raise ValueError("请先调用 precompute_sampling_and_graph 方法。")
+
+#         N = pos.size(0)  # 1024053
+#         out_channels = enhanced_sampled_feats.size(1)  # 6
+#         full_feats = torch.zeros(N, out_channels, device=enhanced_sampled_feats.device)  # [1024053, 6]
+
+#         # 赋值最近采样点的增强特征
+#         full_feats.copy_(enhanced_sampled_feats[self.nearest_sampled_indices])  # [1024053, 6]
+
+#         # 保留采样点的梯度
+#         full_feats[self.sampled_indices] = enhanced_sampled_feats  # [M, 6]
+#         return full_feats
+
 #     def forward(self, init_feats, pos):
 #         if self.sampled_indices is None:
-#             raise ValueError("请先调用 precompute_sampling_and_graph 方法。")
+#             self.precompute_sampling_and_graph(pos)
 
 #         # 提取采样点的初始特征
 #         sampled_feats = init_feats[self.sampled_indices]  # [M, in_channels]，例如 [5121, 6]
 
-#         # 拼接位置信息
-#         sampled_pos = pos[self.sampled_indices]
-#         sampled_feats_with_pos = torch.cat([sampled_feats, sampled_pos], dim=1)
+#         # 多层叠加处理
+#         for i in range(self.num_layers):
+#             sampled_feats = self.pointnet_convs[i](sampled_feats, self.sampled_pos, self.edge_index)
 
-#         # 用 PointNetConv 增强采样点特征
-#         enhanced_sampled_feats = self.pointnet_conv(sampled_feats_with_pos)  # [M, in_channels]
-#         # 初始化全量特征
-#         full_feats = init_feats[:,:6].clone()
-
-#         # 将增强后的采样点特征赋值给全量特征中对应的位置
-#         full_feats[self.sampled_indices] = enhanced_sampled_feats
+#         # 扩散到所有点
+#         full_feats = self.interpolate_features(sampled_feats, pos)
 #         return full_feats
 
 
@@ -637,28 +608,28 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
 
         # ############## 标准化处理-GNN融合特征 ####################
-        if iteration >= 30001:
-            if iteration == 30001:
-                start = time.time()
-                gnn.precompute_sampling_and_graph(gaussians._xyz.detach())
-                print(f"Precompute KNN: {time.time() - start:.2f} seconds")
-            color_feats = gaussians._features_dc.squeeze(1).detach()  # [1024053, 3]
-            init_feats = torch.cat((gaussians._ins_feat, color_feats.detach()), dim=1)
-            ins_feat = init_feats
-            ins_feat_norm = (ins_feat - ins_feat.mean(dim=0, keepdim=True)) / (ins_feat.std(dim=0, keepdim=True) + 1e-10)
-            enhanced_feats = gnn(ins_feat_norm)#, gaussians._xyz.detach())
-            enhanced_feats_norm = (enhanced_feats - enhanced_feats.mean(dim=0, keepdim=True)) / \
-                                (enhanced_feats.std(dim=0, keepdim=True) + 1e-10)
-            final_feats = enhanced_feats_norm + gaussians._ins_feat
+        # if iteration >= 30001:
+        #     if iteration == 30001:
+        #         start = time.time()
+        #         gnn.precompute_sampling_and_graph(gaussians._xyz.detach())
+        #         print(f"Precompute KNN: {time.time() - start:.2f} seconds")
+        #     color_feats = gaussians._features_dc.squeeze(1).detach()  # [1024053, 3]
+        #     init_feats = torch.cat((gaussians._ins_feat, color_feats), dim=1)
+        #     ins_feat = init_feats
+        #     ins_feat_norm = (ins_feat - ins_feat.mean(dim=0, keepdim=True)) / (ins_feat.std(dim=0, keepdim=True) + 1e-10)
+        #     enhanced_feats = gnn(ins_feat_norm)#, gaussians._xyz.detach())
+        #     enhanced_feats_norm = (enhanced_feats - enhanced_feats.mean(dim=0, keepdim=True)) / \
+        #                         (enhanced_feats.std(dim=0, keepdim=True) + 1e-10)
+        #     final_feats = enhanced_feats_norm + gaussians._ins_feat
 
-            # ins_feat = gaussians._ins_feat
-            # ins_feat_norm = (ins_feat - ins_feat.mean(dim=0, keepdim=True)) / (ins_feat.std(dim=0, keepdim=True) + 1e-10)
-            # enhanced_feats = gnn(ins_feat_norm)
-            # enhanced_feats_norm = (enhanced_feats - enhanced_feats.mean(dim=0, keepdim=True)) / \
-            #                     (enhanced_feats.std(dim=0, keepdim=True) + 1e-10)
-            # final_feats = enhanced_feats_norm + ins_feat_norm
-        else:
-            final_feats = gaussians._ins_feat
+        #     # ins_feat = gaussians._ins_feat
+        #     # ins_feat_norm = (ins_feat - ins_feat.mean(dim=0, keepdim=True)) / (ins_feat.std(dim=0, keepdim=True) + 1e-10)
+        #     # enhanced_feats = gnn(ins_feat_norm)
+        #     # enhanced_feats_norm = (enhanced_feats - enhanced_feats.mean(dim=0, keepdim=True)) / \
+        #     #                     (enhanced_feats.std(dim=0, keepdim=True) + 1e-10)
+        #     # final_feats = enhanced_feats_norm + ins_feat_norm
+        # else:
+        final_feats = gaussians._ins_feat
 
 
         render_pkg = render(viewpoint_cam, gaussians, pipe, bg, iteration,
@@ -728,7 +699,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 # loss = nt_xent_loss(feat_mean_stack, temperature=0.01) 
                 # lambda_weight = min(1, (iteration-30000) / 10000 * 1)
                 # loss = nt_xent_loss(feat_mean_stack, temperature=0.1) 
-                loss = separation_loss(feat_mean_stack, temperature=opt.temp)# + cohesion_loss(rendered_ins_feat, mask_bool, feat_mean_stack)
+                loss = separation_loss(feat_mean_stack) + 0.1*cohesion_loss(rendered_ins_feat, mask_bool, feat_mean_stack)
                 
 
                
@@ -774,7 +745,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         #     loss = loss + mask_loss
         
         if no_need_bk == False:
-            loss.backward()
+            # loss.backward()
             pass
         if iteration == opt.iterations:
             # print(f"ins_feat1 std: {gaussians._ins_feat.std(dim=0)}")
@@ -782,7 +753,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             gaussians._ins_feat = final_feats
             # print(f"ins_feat2 std: {gaussians._ins_feat.std(dim=0)}")
             start_t = time.perf_counter()
-            ins_feat_kmeans.forward(gaussians)  # note: position weight
+            ins_feat_kmeans.forward(gaussians, opt.pos_weight)  # note: position weight
             clustering_time = time.perf_counter() - start_t
             print(f'Clustering time: {clustering_time:.2f} seconds')
         iter_end.record()
@@ -1103,10 +1074,11 @@ def construct_pseudo_ins_feat(scene : Scene, renderFunc, renderArgs,
                 # only for visualization, [num_pesudo_mask, dim， H, W]
                 pesudo_mask_feat = view.pesudo_ins_feat * view.pesudo_mask_bool.unsqueeze(1)
                 # distance
+                # l1_dis, _ = calculate_pairwise_distances(pred_mask_feat_mean, pesudo_mask_feat_mean, metric="l1")   # method="l1"
                 _,_,dis = calculate_pairwise_distances(pred_mask_feat_mean, pesudo_mask_feat_mean, metric="cosine")   # method="l1"
 
                 # (3) iou-feature distance joint score
-                scores = ious * (1-dis)      # Eq.(5) in the paper
+                scores = ious#*(1-dis)      # Eq.(5) in the paper
                 # (4) save the association result
                 max_score, max_ind = torch.max(scores, dim=-1)  # [num_leaf]
                 b_matched = max_score > 0.2     # todo

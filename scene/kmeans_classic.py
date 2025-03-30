@@ -152,10 +152,10 @@ from torch_scatter import scatter_mean
 from hdbscan import HDBSCAN  # 需要安装 hdbscan: pip install hdbscan
 
 class HDBSCAN_Clustering:
-    def __init__(self, batch_size=1000):
+    def __init__(self, batch_size=1000, min_cluster_size=None):
         self.centers = torch.empty(0)  # 存储聚类中心
         self.cls_ids = torch.empty(0)  # 存储样本标签
-        self.min_cluster_size = 60 # HDBSCAN 的最小簇大小，类似于 min_samples （50-2000）
+        self.min_cluster_size = min_cluster_size # HDBSCAN 的最小簇大小，类似于 min_samples （50-2000）
         self.min_samples = 50        # 用于软聚类的参数，控制噪声点 （10-100）
         self.batch_size = batch_size
 
@@ -230,8 +230,10 @@ class HDBSCAN_Clustering:
             xyz_mean = gaussian._xyz.mean(dim=0, keepdim=True)
             xyz_std = gaussian._xyz.std(dim=0, keepdim=True)
             xyz = (gaussian._xyz - xyz_mean) / (xyz_std + 1e-10)
-
-            feat = torch.cat((ins, 0.01*xyz), dim=1)  # [N, 9]
+            # ins = gaussian._ins_feat
+            # xyz = gaussian._xyz
+            feat = torch.cat((ins, pos_weight*xyz), dim=1)  # [N, 9]
+            # feat = ins
             # feat = xyz
 
         # 执行 HDBSCAN 聚类
