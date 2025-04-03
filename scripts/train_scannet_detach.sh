@@ -24,10 +24,10 @@ conda activate opengs
 scan_list=("scene0000_00" "scene0062_00" "scene0070_00" "scene0097_00" "scene0140_00" \
 "scene0200_00" "scene0347_00" "scene0400_00" "scene0590_00" "scene0645_00")
 
-gpu_num=0     # change!
+gpu_num=1     # change!
 for scan in "${scan_list[@]}"; do
     echo "Training for ${scan} ....."
-    CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 501$gpu_num \
+    CUDA_VISIBLE_DEVICES=$gpu_num python train_detach.py --port 501$gpu_num \
         -s /data/sunwei/OpenGaussian/data/${scan} \
         -r 2 \
         --frozen_init_pts \

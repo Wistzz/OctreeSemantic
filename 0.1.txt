@@ -1,0 +1,218 @@
+Training for scene0000_00 .....
+Optimizing 
+Output folder: ./output/5616c7ee-a [01/04 09:46:57]
+Tensorboard not available: not logging progress [01/04 09:46:57]
+Found transforms_train.json file, assuming Blender data set! [01/04 09:46:57]
+Reading Training Transforms [01/04 09:46:57]
+Reading Test Transforms [01/04 09:47:18]
+Resolution:  1.0 [01/04 09:47:39]
+Loading Training Cameras [01/04 09:47:39]
+Loading Test Cameras [01/04 09:47:53]
+Number of points at initialisation :  81369 [01/04 09:48:01]
+[Stage 0] Start 3dgs pre-train ... [01/04 09:48:01]
+
+[ITER 30000] Saving Checkpoint [01/04 09:58:37]
+[Stage 1] Start continuous instance feature learning ... [01/04 09:58:37]
+total points:  81369 [01/04 09:58:37]
+Precompute KNN: 0.19 seconds [01/04 09:58:37]
+Clustering time: 16.14 seconds [01/04 10:11:52]
+
+[ITER 50000] Saving Gaussians [01/04 10:11:52]
+
+[ITER 50000] Saving Checkpoint [01/04 10:11:53]
+[Stage 3] Start 2D language feature - 3D cluster association ... [01/04 10:11:53]
+
+Training complete. [01/04 10:14:43]
+Training for scene0062_00 .....
+Optimizing 
+Output folder: ./output/2027ac9a-7 [01/04 10:14:50]
+Tensorboard not available: not logging progress [01/04 10:14:50]
+Found transforms_train.json file, assuming Blender data set! [01/04 10:14:50]
+Reading Training Transforms [01/04 10:14:50]
+Reading Test Transforms [01/04 10:14:53]
+Resolution:  1.0 [01/04 10:14:56]
+Loading Training Cameras [01/04 10:14:56]
+Loading Test Cameras [01/04 10:15:03]
+Number of points at initialisation :  51610 [01/04 10:15:04]
+[Stage 0] Start 3dgs pre-train ... [01/04 10:15:04]
+
+[ITER 30000] Saving Checkpoint [01/04 10:24:21]
+[Stage 1] Start continuous instance feature learning ... [01/04 10:24:21]
+total points:  51610 [01/04 10:24:21]
+Precompute KNN: 0.13 seconds [01/04 10:24:21]
+Clustering time: 6.78 seconds [01/04 10:35:33]
+
+[ITER 50000] Saving Gaussians [01/04 10:35:33]
+
+[ITER 50000] Saving Checkpoint [01/04 10:35:34]
+[Stage 3] Start 2D language feature - 3D cluster association ... [01/04 10:35:34]
+
+Training complete. [01/04 10:35:52]
+Training for scene0070_00 .....
+Optimizing 
+Output folder: ./output/4e90958b-5 [01/04 10:35:58]
+Tensorboard not available: not logging progress [01/04 10:35:58]
+Found transforms_train.json file, assuming Blender data set! [01/04 10:35:58]
+Reading Training Transforms [01/04 10:35:58]
+Reading Test Transforms [01/04 10:36:03]
+Resolution:  1.0 [01/04 10:36:09]
+Loading Training Cameras [01/04 10:36:09]
+Loading Test Cameras [01/04 10:36:17]
+Number of points at initialisation :  109380 [01/04 10:36:18]
+[Stage 0] Start 3dgs pre-train ... [01/04 10:36:19]
+
+[ITER 30000] Saving Checkpoint [01/04 10:46:41]
+[Stage 1] Start continuous instance feature learning ... [01/04 10:46:41]
+total points:  109380 [01/04 10:46:41]
+Precompute KNN: 13.09 seconds [01/04 10:46:54]
+Clustering time: 19.76 seconds [01/04 11:01:01]
+
+[ITER 50000] Saving Gaussians [01/04 11:01:02]
+
+[ITER 50000] Saving Checkpoint [01/04 11:01:03]
+[Stage 3] Start 2D language feature - 3D cluster association ... [01/04 11:01:03]
+
+Training complete. [01/04 11:02:17]
+Training for scene0097_00 .....
+Optimizing 
+Output folder: ./output/2d7dd00c-2 [01/04 11:02:25]
+Tensorboard not available: not logging progress [01/04 11:02:25]
+Found transforms_train.json file, assuming Blender data set! [01/04 11:02:25]
+Reading Training Transforms [01/04 11:02:25]
+Reading Test Transforms [01/04 11:02:27]
+Resolution:  1.0 [01/04 11:02:31]
+Loading Training Cameras [01/04 11:02:31]
+Loading Test Cameras [01/04 11:02:38]
+Number of points at initialisation :  72007 [01/04 11:02:38]
+[Stage 0] Start 3dgs pre-train ... [01/04 11:02:39]
+
+[ITER 30000] Saving Checkpoint [01/04 11:11:09]
+[Stage 1] Start continuous instance feature learning ... [01/04 11:11:09]
+total points:  72007 [01/04 11:11:09]
+Precompute KNN: 0.16 seconds [01/04 11:11:09]
+Clustering time: 8.30 seconds [01/04 11:22:07]
+
+[ITER 50000] Saving Gaussians [01/04 11:22:08]
+
+[ITER 50000] Saving Checkpoint [01/04 11:22:09]
+[Stage 3] Start 2D language feature - 3D cluster association ... [01/04 11:22:09]
+
+Training complete. [01/04 11:22:28]
+Training for scene0140_00 .....
+Optimizing 
+Output folder: ./output/89398328-b [01/04 11:22:37]
+Tensorboard not available: not logging progress [01/04 11:22:37]
+Found transforms_train.json file, assuming Blender data set! [01/04 11:22:37]
+Reading Training Transforms [01/04 11:22:37]
+Reading Test Transforms [01/04 11:22:52]
+Resolution:  1.0 [01/04 11:23:11]
+Loading Training Cameras [01/04 11:23:11]
+Loading Test Cameras [01/04 11:23:20]
+Number of points at initialisation :  372941 [01/04 11:23:25]
+[Stage 0] Start 3dgs pre-train ... [01/04 11:23:26]
+
+[ITER 30000] Saving Checkpoint [01/04 11:35:14]
+[Stage 1] Start continuous instance feature learning ... [01/04 11:35:14]
+total points:  372941 [01/04 11:35:14]
+Precompute KNN: 43.31 seconds [01/04 11:35:58]
+Clustering time: 108.20 seconds [01/04 11:51:31]
+
+[ITER 50000] Saving Gaussians [01/04 11:51:32]
+
+[ITER 50000] Saving Checkpoint [01/04 11:51:36]
+[Stage 3] Start 2D language feature - 3D cluster association ... [01/04 11:51:37]
+
+Training complete. [01/04 12:19:59]
+Training for scene0200_00 .....
+Optimizing 
+Output folder: ./output/64f2aa6b-e [01/04 12:20:07]
+Tensorboard not available: not logging progress [01/04 12:20:07]
+Found transforms_train.json file, assuming Blender data set! [01/04 12:20:07]
+Reading Training Transforms [01/04 12:20:07]
+Reading Test Transforms [01/04 12:20:11]
+Resolution:  1.0 [01/04 12:20:16]
+Loading Training Cameras [01/04 12:20:16]
+Training for scene0347_00 .....
+Optimizing 
+Output folder: ./output/27a55a86-5 [01/04 12:20:28]
+Tensorboard not available: not logging progress [01/04 12:20:28]
+Found transforms_train.json file, assuming Blender data set! [01/04 12:20:28]
+Reading Training Transforms [01/04 12:20:28]
+Reading Test Transforms [01/04 12:20:32]
+Resolution:  1.0 [01/04 12:20:36]
+Loading Training Cameras [01/04 12:20:36]
+Loading Test Cameras [01/04 12:20:43]
+Number of points at initialisation :  67984 [01/04 12:20:43]
+[Stage 0] Start 3dgs pre-train ... [01/04 12:20:44]
+
+[ITER 30000] Saving Checkpoint [01/04 12:28:30]
+[Stage 1] Start continuous instance feature learning ... [01/04 12:28:30]
+total points:  67984 [01/04 12:28:30]
+Precompute KNN: 0.14 seconds [01/04 12:28:30]
+Clustering time: 8.78 seconds [01/04 12:40:40]
+
+[ITER 50000] Saving Gaussians [01/04 12:40:41]
+
+[ITER 50000] Saving Checkpoint [01/04 12:40:41]
+[Stage 3] Start 2D language feature - 3D cluster association ... [01/04 12:40:41]
+
+Training complete. [01/04 12:41:12]
+Training for scene0400_00 .....
+Optimizing 
+Output folder: ./output/cefff828-1 [01/04 12:41:19]
+Tensorboard not available: not logging progress [01/04 12:41:19]
+Found transforms_train.json file, assuming Blender data set! [01/04 12:41:19]
+Reading Training Transforms [01/04 12:41:19]
+Reading Test Transforms [01/04 12:41:23]
+Resolution:  1.0 [01/04 12:41:29]
+Loading Training Cameras [01/04 12:41:29]
+Training for scene0590_00 .....
+Optimizing 
+Output folder: ./output/f793143b-d [01/04 12:41:44]
+Tensorboard not available: not logging progress [01/04 12:41:44]
+Found transforms_train.json file, assuming Blender data set! [01/04 12:41:44]
+Reading Training Transforms [01/04 12:41:44]
+Reading Test Transforms [01/04 12:41:53]
+Resolution:  1.0 [01/04 12:42:05]
+Loading Training Cameras [01/04 12:42:05]
+Loading Test Cameras [01/04 12:42:12]
+Number of points at initialisation :  222957 [01/04 12:42:15]
+[Stage 0] Start 3dgs pre-train ... [01/04 12:42:16]
+
+[ITER 30000] Saving Checkpoint [01/04 12:54:29]
+[Stage 1] Start continuous instance feature learning ... [01/04 12:54:29]
+total points:  222957 [01/04 12:54:29]
+Precompute KNN: 26.12 seconds [01/04 12:54:55]
+Clustering time: 42.66 seconds [01/04 13:09:46]
+
+[ITER 50000] Saving Gaussians [01/04 13:09:47]
+
+[ITER 50000] Saving Checkpoint [01/04 13:09:50]
+[Stage 3] Start 2D language feature - 3D cluster association ... [01/04 13:09:50]
+
+Training complete. [01/04 13:16:55]
+Training for scene0645_00 .....
+Optimizing 
+Output folder: ./output/4987e0b1-b [01/04 13:17:03]
+Tensorboard not available: not logging progress [01/04 13:17:03]
+Found transforms_train.json file, assuming Blender data set! [01/04 13:17:03]
+Reading Training Transforms [01/04 13:17:03]
+Reading Test Transforms [01/04 13:17:19]
+Resolution:  1.0 [01/04 13:17:39]
+Loading Training Cameras [01/04 13:17:39]
+Loading Test Cameras [01/04 13:17:49]
+Number of points at initialisation :  352477 [01/04 13:17:56]
+[Stage 0] Start 3dgs pre-train ... [01/04 13:17:56]
+
+[ITER 30000] Saving Checkpoint [01/04 13:30:33]
+[Stage 1] Start continuous instance feature learning ... [01/04 13:30:33]
+total points:  352477 [01/04 13:30:33]
+Precompute KNN: 40.95 seconds [01/04 13:31:14]
+Clustering time: 95.78 seconds [01/04 13:49:32]
+
+[ITER 50000] Saving Gaussians [01/04 13:49:33]
+
+[ITER 50000] Saving Checkpoint [01/04 13:49:37]
+[Stage 3] Start 2D language feature - 3D cluster association ... [01/04 13:49:38]
+
+Training complete. [01/04 14:11:12]

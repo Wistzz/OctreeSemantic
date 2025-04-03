@@ -1,9 +1,9 @@
 eval "$(conda shell.bash hook)"
 conda activate opengs
 
-min_cluster_sizes=(100)
+min_cluster_sizes=(2500)
 scan="figurines"
-gpu_num=3
+gpu_num=1
 
 for min_cluster_size in "${min_cluster_sizes[@]}"; do
     echo "Training for ${scan} ....."
@@ -15,12 +15,12 @@ for min_cluster_size in "${min_cluster_sizes[@]}"; do
         --start_leaf_cb_iter 50000 \
         --sam_level 3 \
         --cluster_num 256 \
-        --pos_weight 1e-2 \
+        --pos_weight 0.1 \
         --min_cluster_size $min_cluster_size \
         --save_memory \
         --test_iterations 30000 \
         --spatial_grid_size 2.0 \
         --eval \
-        --start_checkpoint /data/sunwei/OctreeSemantic/output/fig_random/chkpnt40000.pth
+        --start_checkpoint /data/sunwei/OctreeSemantic/output/detach_figurines/chkpnt40000.pth
 done
     

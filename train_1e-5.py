@@ -33,10 +33,10 @@ import faiss
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import PointNetConv, knn_graph
+from torch_geometric.nn import PointNetConv, knn_graph, fps
 from torch_geometric.data import Data
-from scene.kmeans_classic import ClassicKMeans, DBSCAN_Clustering
-from scene.xmeans import XMeans
+from scene.kmeans_classic import HDBSCAN_Clustering
+# from scene.xmeans import XMeans
 # from scene.dbscan import DBSCANCluster
 from bitarray import bitarray
 from utils.system_utils import mkdir_p
@@ -44,6 +44,9 @@ from utils.opengs_utlis import mask_feature_mean, pair_mask_feature_mean, \
     get_SAM_mask_and_feat, load_code_book, \
     calculate_iou, calculate_distances, calculate_pairwise_distances
 import time
+import open3d as o3d
+
+
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -107,6 +110,7 @@ def save_kmeans(kmeans_list, quantized_params, out_dir, mode="root"):
     # Save codebook
     torch.save(centers_dict, os.path.join(out_dir, 'kmeans_centers.pth'))
 
+
 def cohesion_loss(feat_map, gt_mask, feat_mean_stack):
     """intra-mask smoothing loss. Eq.(1) in the paper
     Constrain the feature of each pixel within the mask to be close to the mean feature of that mask.
@@ -128,22 +132,29 @@ def cohesion_loss(feat_map, gt_mask, feat_mean_stack):
 
     return loss_per_mask.mean()
 
-def infonce_loss(feat_mean_stack, temperature=0.1):
-    """
-    :param feat_mean_stack: 形状为 [N, C] 的特征张量，N 是掩码数量，C 是特征维度
-    :param temperature: 温度参数，用于调整相似度分布
-    :return: InfoNCE 损失
-    """
+import torch
+import torch.nn.functional as F
+
+
+#   infonce
+def separation_loss(feat_mean_stack, temperature=0.05):
     N, C = feat_mean_stack.shape
-    # 计算特征之间的相似度矩阵
-    similarity_matrix = torch.matmul(feat_mean_stack, feat_mean_stack.T)  # [N, N]
-    similarity_matrix /= temperature
+    if N <= 1:
+        return torch.tensor(0.0, device=feat_mean_stack.device)
 
-    # 创建标签，对角线元素为正样本对
-    labels = torch.arange(N, device=feat_mean_stack.device)
+    feat_norm = F.normalize(feat_mean_stack, p=2, dim=1)
+    similarity_matrix = torch.matmul(feat_norm, feat_norm.T)  # [N, N]
+    pos_mask = torch.eye(N, dtype=torch.bool, device=feat_mean_stack.device)
+    neg_mask = ~pos_mask
 
-    # 计算交叉熵损失
-    loss = F.cross_entropy(similarity_matrix, labels)
+    pos_sim = similarity_matrix[pos_mask].view(N, 1)  # [N, 1]
+    neg_sim = similarity_matrix[neg_mask].view(N, N-1)  # [N, N-1]
+
+    exp_pos = torch.exp(pos_sim / temperature)
+    exp_neg = torch.exp(neg_sim / temperature)
+    neg_sum = exp_neg.sum(dim=1, keepdim=True)
+
+    loss = -torch.log(exp_pos / (neg_sum + 1e-10)).mean()
     return loss
 
 # def separation_loss(feat_mean_stack, iteration):
@@ -171,7 +182,6 @@ def infonce_loss(feat_mean_stack, temperature=0.1):
 #     sorted_indices = inverse_distance.argsort().argsort()
 #     loss_weight = (sorted_indices.float() / (N - 1)) * (1.0 - 0.1) + 0.1    # scale to 0.1 - 1.0, [N, N]
 #     # small weight
-#     breakpoint()
 #     if iteration > 35_000:
 #         loss_weight[loss_weight < 0.9] = 0.1
 #     inverse_distance *= loss_weight     # [N, N]
@@ -180,86 +190,286 @@ def infonce_loss(feat_mean_stack, temperature=0.1):
 #     loss = inverse_distance.sum() / (N * (N - 1))
 
 #     return loss
-
-def separation_loss(feat_mean_stack, iteration, margin=1.0):
-    N, C = feat_mean_stack.shape
-    anchor_expanded = feat_mean_stack.unsqueeze(1).expand(N, N, C)
-    negative_expanded = feat_mean_stack.unsqueeze(0).expand(N, N, C)
-    neg_dist = torch.sqrt(torch.clamp((anchor_expanded - negative_expanded).pow(2).sum(2), min=1e-6))
-    mask = ~torch.eye(N, device=feat_mean_stack.device).bool()
-    valid_neg_dist = neg_dist[mask].view(N, N-1)
-    min_neg_dist, _ = valid_neg_dist.min(dim=1)
-    pos_dist = torch.zeros(N, device=feat_mean_stack.device)
-    triplet_loss = torch.relu(pos_dist - min_neg_dist + margin)
-    loss = triplet_loss.mean()
-    return loss
-
-
-
+# def separation_loss(feat_mean_stack, iteration, margin=1.0):
+#     N, C = feat_mean_stack.shape
+#     if N <= 1:
+#         return torch.tensor(0.0, device=feat_mean_stack.device)
+    
+#     # L2 归一化
+#     feat_norm = F.normalize(feat_mean_stack, dim=1)
+    
+#     # 计算距离矩阵
+#     dist_matrix = torch.cdist(feat_norm, feat_norm)  # [N, N]
+    
+#     # 设置对角线为无穷大，排除自身距离
+#     mask = torch.eye(N, dtype=torch.bool, device=dist_matrix.device)
+#     dist_matrix = dist_matrix.masked_fill(mask, float('inf'))
+    
+#     # 找到每个实例的最小距离（即最难负样本）
+#     min_dist = dist_matrix.min(dim=1)[0]  # [N]
+    
+#     # 计算损失
+#     loss = torch.clamp(margin - min_dist, min=0).mean()
+    
+#     return loss
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import PointNetConv, knn_graph
-from torch_geometric.data import Data
+from torch_geometric.nn import EdgeConv, knn
+from torch_cluster import fps, knn_graph
+from torch.nn import Sequential, Linear, ReLU
+import time
+import argparse 
 
-class GNNFeatureExtractor(nn.Module):
-    def __init__(self, in_channels=6, hidden_channels=64, out_channels=6, k=9):
-        """
-        初始化 GNN 特征提取器
-        参数:
-        - in_channels: 输入特征维度 (gaussians._ins_feat 的 6 维)
-        - hidden_channels: 中间层维度，增加表达能力
-        - out_channels: 输出维度，与输入一致
-        - k: KNN 邻居数
-        """
+# ###### nearest 
+# class EdgeConvFeatureEnhancer(nn.Module):
+#     def __init__(self, in_channels, out_channels, k=5, sampling_ratio=0.1, interp_k=3):
+#         super().__init__()
+#         self.k = k
+#         self.sampling_ratio = sampling_ratio  # 采样率 0.1
+#         self.interp_k = interp_k  # 近邻插值用的 k
+#         self.edge_conv = EdgeConv(Sequential(
+#             Linear(2 * in_channels, out_channels),
+#             ReLU(),
+#             Linear(out_channels, out_channels)
+#         ))
+#         self.sample_idx = None
+#         self.sampled_pos = None
+#         self.edge_index = None
+#         self.interp_assign_index = None
+
+#     def precompute_sampling_and_graph(self, pos):
+#         # 采样 10% 的点
+#         self.sample_idx = fps(pos, ratio=self.sampling_ratio)
+#         self.sampled_pos = pos[self.sample_idx]
+#         self.edge_index = knn_graph(self.sampled_pos, k=self.k)
+
+#         # 计算插值索引，确保不越界
+#         assign_index = knn(self.sampled_pos, pos, k=self.interp_k)  # [2, N * interp_k]
+#         valid_mask = (assign_index[0] < self.sampled_pos.size(0)) & (assign_index[1] < pos.size(0))
+#         self.interp_assign_index = assign_index[:, valid_mask]
+
+#     def interpolate_features(self, sampled_feats, init_feats):
+#         if self.interp_assign_index is None:
+#             raise ValueError("请先调用 precompute_sampling_and_graph 方法。")
+
+#         # 初始化输出特征为原始特征
+#         full_feats = init_feats.clone()
+
+#         # 插值：直接用最近邻采样点的特征赋值（简单加权平均）
+#         interp_feats = sampled_feats[self.interp_assign_index[0]]
+#         full_feats.scatter_(0, self.interp_assign_index[1].unsqueeze(1).expand(-1, sampled_feats.size(1)), interp_feats)
+
+#         # 采样点用 GNN 增强特征
+#         full_feats[self.sample_idx] = sampled_feats
+#         return full_feats
+
+#     def forward(self, init_feats):
+#         if self.sample_idx is None:
+#             raise ValueError("请先调用 precompute_sampling_and_graph 方法。")
+
+#         # 10% 的采样点用 GNN 增强
+#         sampled_feats = init_feats[self.sample_idx]
+#         enhanced_sampled_feats = self.edge_conv(sampled_feats, self.edge_index)
+
+#         # 其余 90% 的点通过插值赋值
+#         full_feats = self.interpolate_features(enhanced_sampled_feats, init_feats)
+#         return full_feats
+
+import torch
+import torch.nn as nn
+from torch.nn import Linear, Sequential
+import torch.nn.functional as F
+from torch_geometric.nn import PointNetConv, fps, knn_graph, knn
+
+class PointNetFeatureEnhancer(nn.Module):
+    def __init__(self, in_channels, out_channels, k=5, sampling_ratio=0.1):
         super().__init__()
         self.k = k
-        
-        # 两层 PointNetConv
-        self.conv1 = PointNetConv(local_nn=nn.Linear(3 + in_channels, hidden_channels))
-        self.conv2 = PointNetConv(local_nn=nn.Linear(3 + hidden_channels, out_channels))
-        
-        # 可学习权重，用于加法融合
-        self.alpha = nn.Parameter(torch.ones(1, out_channels) * 0.5)  # 初始值为 0.5
-        
-        # 初始化权重
-        nn.init.xavier_uniform_(self.conv1.local_nn.weight)
-        nn.init.zeros_(self.conv1.local_nn.bias)
-        nn.init.xavier_uniform_(self.conv2.local_nn.weight)
-        nn.init.zeros_(self.conv2.local_nn.bias)
-        
-        # 存储预计算的全局 KNN 图
+        self.sampling_ratio = sampling_ratio
+        self.pointnet_conv = PointNetConv(local_nn=Sequential(
+            Linear(in_channels + 3, 16),
+            nn.ReLU(),
+            Linear(16, out_channels)
+        ))
+        self.sampled_indices = None
+        self.sampled_pos = None
         self.edge_index = None
+        self.nearest_sampled_indices = None
+        # self.gate_linear = nn.Linear(in_channels, 1)  # 用于生成门控值
 
-    def precompute_knn(self, pos):
-        """
-        预计算全局 KNN 图
-        输入:
-        - pos: [N, 3], 点云位置 (gaussians._xyz)
-        """
-        self.edge_index = knn_graph(pos, k=self.k, loop=False)
+    def precompute_sampling_and_graph(self, pos):
+        N = pos.size(0)  # 动态获取总点数
+        print('total points: ', N)
+        target_num = 1e5 # 固定采样点数
+        
+        if N <= target_num:
+            # 点数不足，直接使用所有点
+            self.sampled_indices = torch.arange(N, dtype=torch.long, device=pos.device)
+            self.sampled_pos = pos
+            M = N
+        else:
+            # 进行FPS采样到10万点
+            self.sampled_indices = fps(pos, ratio=target_num / N)  # 计算动态比例
+            self.sampled_pos = pos[self.sampled_indices]
+            M = self.sampled_pos.size(0)
+        
+        # 构建k-NN图
+        self.edge_index = knn_graph(self.sampled_pos, k=self.k)
+        
+        # 查找最近邻
+        nearest_indices = knn(self.sampled_pos, pos, k=1)
+        self.nearest_sampled_indices = nearest_indices[1]
+    def interpolate_features(self, enhanced_sampled_feats, pos):
+        if self.nearest_sampled_indices is None:
+            raise ValueError("请先调用 precompute_sampling_and_graph 方法。")
+        
+        N = pos.size(0)  # 1024053
+        out_channels = enhanced_sampled_feats.size(1)  # 6
+        full_feats = torch.zeros(N, out_channels, device=enhanced_sampled_feats.device)  # [1024053, 6]
+        
+        # 赋值最近采样点的增强特征
+        full_feats.copy_(enhanced_sampled_feats[self.nearest_sampled_indices])  # [1024053, 6]
+        
+        # 保留采样点的梯度
+        full_feats[self.sampled_indices] = enhanced_sampled_feats  # [M, 6]
+        return full_feats
 
-    def forward(self, pos, initial_feats):
-        """
-        前向传播
-        输入:
-        - pos: [N, 3], 点云位置 (gaussians._xyz)
-        - initial_feats: [N, 6], 初始特征 (gaussians._ins_feat)
-        输出:
-        - enhanced_feats: [N, 6], 增强特征
-        """
-        if self.edge_index is None:
-            raise ValueError("请先调用 precompute_knn 方法预计算 KNN 图")
+    def forward(self, init_feats):
+        if self.sampled_indices is None:
+            raise ValueError("请先调用 precompute_sampling_and_graph 方法。")
         
-        # 一次性处理整个点云
-        data = Data(x=initial_feats, pos=pos, edge_index=self.edge_index)
+        # 提取采样点的初始特征
+        sampled_feats = init_feats[self.sampled_indices]  # [M, in_channels]，例如 [5121, 6]
+
+        # 用 PointNetConv 增强采样点特征
+        enhanced_sampled_feats = self.pointnet_conv(sampled_feats, self.sampled_pos, self.edge_index)  # [M, out_channels]，例如 [5121, 16]
+        # 扩散到所有点
+        full_feats = self.interpolate_features(enhanced_sampled_feats, init_feats)
+        return full_feats
+
+
+    
+
+import torch
+import torch.nn as nn
+from torch.nn import Sequential, Linear
+from torch_cluster import fps, knn_graph, knn
+
+
+# class PointNetFeatureEnhancer(nn.Module):
+#     def __init__(self, in_channels, out_channels, k=5, sampling_ratio=0.1):
+#         super().__init__()
+#         self.k = k
+#         self.sampling_ratio = sampling_ratio
+#         self.pointnet_conv = nn.Sequential(
+#             Linear(in_channels + 3, 16),
+#             nn.ReLU(),
+#             Linear(16, 6)
+#         )
+#         self.sampled_indices = None
+#         self.sampled_pos = None
+#         self.edge_index = None
+#         self.nearest_sampled_indices = None
+
+#     def precompute_sampling_and_graph(self, pos):
+#         N = pos.size(0)  # 动态获取总点数
+#         target_num = 1e3#5  # 固定采样点数
+
+#         if N <= target_num:
+#             # 点数不足，直接使用所有点
+#             self.sampled_indices = torch.arange(N, dtype=torch.long, device=pos.device)
+#             self.sampled_pos = pos
+#             M = N
+#         else:
+#             # 进行FPS采样到10万点
+#             self.sampled_indices = fps(pos, ratio=target_num / N)  # 计算动态比例
+#             self.sampled_pos = pos[self.sampled_indices]
+#             M = self.sampled_pos.size(0)
+
+#         # 构建k-NN图
+#         self.edge_index = knn_graph(self.sampled_pos, k=self.k)
+
+#         # 查找最近邻
+#         nearest_indices = knn(self.sampled_pos, pos, k=1)
+#         self.nearest_sampled_indices = nearest_indices[1]
+
+#     def forward(self, init_feats, pos):
+#         if self.sampled_indices is None:
+#             raise ValueError("请先调用 precompute_sampling_and_graph 方法。")
+
+#         # 提取采样点的初始特征
+#         sampled_feats = init_feats[self.sampled_indices]  # [M, in_channels]，例如 [5121, 6]
+
+#         # 拼接位置信息
+#         sampled_pos = pos[self.sampled_indices]
+#         sampled_feats_with_pos = torch.cat([sampled_feats, sampled_pos], dim=1)
+
+#         # 用 PointNetConv 增强采样点特征
+#         enhanced_sampled_feats = self.pointnet_conv(sampled_feats_with_pos)  # [M, in_channels]
+#         # 初始化全量特征
+#         full_feats = init_feats[:,:6].clone()
+
+#         # 将增强后的采样点特征赋值给全量特征中对应的位置
+#         full_feats[self.sampled_indices] = enhanced_sampled_feats
+#         return full_feats
+
+
+# MLP
+# class GNNFeatureExtractor(nn.Module):
+#     def __init__(self, in_channels=6, hidden_channels=32, out_channels=6, k=9):
+#         super().__init__()
+#         self.k = k
+#         self.conv1 = PointNetConv(local_nn=nn.Linear(3 + in_channels, hidden_channels))
+#         self.conv2 = PointNetConv(local_nn=nn.Linear(3 + hidden_channels, out_channels))
+#         # 添加融合用的 MLP
+#         self.fusion_mlp = nn.Sequential(
+#             nn.Linear(in_channels + out_channels, hidden_channels),  # 输入：6 + 6 -> 32
+#             nn.ReLU(),
+#             nn.Linear(hidden_channels, out_channels)  # 32 -> 6
+#         )
+#         # 初始化
+#         nn.init.xavier_uniform_(self.conv1.local_nn.weight)
+#         nn.init.zeros_(self.conv1.local_nn.bias)
+#         nn.init.xavier_uniform_(self.conv2.local_nn.weight)
+#         nn.init.zeros_(self.conv2.local_nn.bias)
+#         nn.init.xavier_uniform_(self.fusion_mlp[0].weight)
+#         nn.init.zeros_(self.fusion_mlp[0].bias)
+#         nn.init.xavier_uniform_(self.fusion_mlp[2].weight)
+#         nn.init.zeros_(self.fusion_mlp[2].bias)
+#         self.edge_index = None
+#         self.sample_idx = None
+
+#     def precompute_knn(self, pos):
+#         # FPS 采样 10% 的点，减少计算量
+#         sample_idx = fps(pos, ratio=0.4)
+#         sampled_pos = pos[sample_idx]
+#         self.edge_index = knn_graph(sampled_pos, k=self.k, loop=False)
+#         self.sample_idx = sample_idx
+
+#     def forward(self, pos, initial_feats):
+#         if self.edge_index is None:
+#             raise ValueError("请先调用 precompute_knn 方法预计算 KNN 图")
         
-        # 两层 GNN
-        x = F.relu(self.conv1(data.x, data.pos, data.edge_index))  # [N, 64]
-        enhanced_feats = self.conv2(x, data.pos, data.edge_index)  # [N, 6]
+#         # 采样输入特征
+#         sampled_feats = initial_feats[self.sample_idx]
+#         sampled_pos = pos[self.sample_idx]
         
-        return enhanced_feats
+#         # 两层 GNN 计算
+#         data = Data(x=sampled_feats, pos=sampled_pos, edge_index=self.edge_index)
+#         x = F.relu(self.conv1(data.x, data.pos, data.edge_index))
+#         enhanced_feats = self.conv2(x, data.pos, data.edge_index)
+        
+#         # 插值回全点云
+#         full_enhanced_feats = torch.zeros_like(initial_feats)
+#         full_enhanced_feats[self.sample_idx] = enhanced_feats
+        
+#         # 特征级联 + MLP 融合
+#         concat_feats = torch.cat([initial_feats, full_enhanced_feats], dim=1)  # [N, in_channels + out_channels]
+#         final_feats = self.fusion_mlp(concat_feats)  # [N, out_channels]
+        
+#         return final_feats
 
 
 
@@ -297,11 +507,25 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         ins_feat_continue = None    # not used
 
     # initialize the clustering
-    ins_feat_kmeans = DBSCAN_Clustering()
+    # ins_feat_kmeans = DBSCAN_Clustering()
+    ins_feat_kmeans = HDBSCAN_Clustering(min_cluster_size=opt.min_cluster_size)
     # 使用 GNN
-    # 使用代码
-    gnn = GNNFeatureExtractor(k=16).cuda()
-    optimizer = torch.optim.Adam(gnn.parameters(), lr=1e-3)  # 学习率稍大，确保训练有效
+    # gnn = EdgeConvFeatureEnhancer(in_channels=6, out_channels=6, k=24, sampling_ratio=0.1).cuda()    # optimizer = torch.optim.AdamW([
+    gnn = PointNetFeatureEnhancer(in_channels=9, out_channels=6, k=16, sampling_ratio=0.1).cuda()#, num_layers=5).cuda()
+    #     {'params': gnn.parameters()}
+    # ], lr=5e-4, weight_decay=0.01)  # AdamW优化器
+    # scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+    #     optimizer,
+    #     T_0=500,  # 初始周期长度
+    #     T_mult=2,  # 周期长度倍增因子
+    #     eta_min=1e-5  # 学习率下限
+    # )
+    optimizer = torch.optim.Adam([
+    {'params': gnn.parameters()}
+        ], lr=1e-5)  
+    # T_max = 15000  # 迭代的总次数
+    # from torch.optim.lr_scheduler import CosineAnnealingLR
+    # scheduler = CosineAnnealingLR(optimizer, T_max=T_max)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1000, gamma=0.9)
 
 
@@ -389,28 +613,29 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             render_cluster=False
             cluster_indices=None
 
-        # ############## GNN融合特征 ####################
-        # if iteration % 10 == 0:
-        #     enhanced_feats = gnn(gaussians._xyz, gaussians._ins_feat)  # [N, 6]
-        # else:
-        #     enhanced_feats = enhanced_feats.detach()
-        # final_feats = gaussians._ins_feat + enhanced_feats  # [N, 6]  #torch.cat([gaussians._ins_feat, enhanced_feats], dim=-1)
 
         # ############## 标准化处理-GNN融合特征 ####################
-        # 标准化处理-GNN融合特征
-        if iteration >= 30000:
+        if iteration >= 30001:
             if iteration == 30001:
                 start = time.time()
-                gnn.precompute_knn(gaussians._xyz)
+                gnn.precompute_sampling_and_graph(gaussians._xyz.detach())
                 print(f"Precompute KNN: {time.time() - start:.2f} seconds")
-            
-            ins_feat = gaussians._ins_feat  # [N, 6]
-            ins_feat_norm = (ins_feat - ins_feat.mean(dim=0, keepdim=True)) / (ins_feat.std(dim=0, keepdim=True) + 1e-6)
-            
-            # GNN 处理（每次迭代都更新）
-            enhanced_feats = gnn(gaussians._xyz, ins_feat_norm)  # [N, 6]            
-            # 加法融合（直接用 enhanced_feats，不再标准化）
-            final_feats = ins_feat_norm + gnn.alpha * enhanced_feats  # [N, 6]
+            color_feats = gaussians._features_dc.squeeze(1).detach()  # [1024053, 3]
+            init_feats = torch.cat((gaussians._ins_feat, color_feats.detach()), dim=1)
+            ins_feat = init_feats
+            ins_feat_norm = (ins_feat - ins_feat.mean(dim=0, keepdim=True)) / (ins_feat.std(dim=0, keepdim=True) + 1e-10)
+            enhanced_feats = gnn(ins_feat_norm)#, gaussians._xyz.detach())
+            enhanced_feats_norm = (enhanced_feats - enhanced_feats.mean(dim=0, keepdim=True)) / \
+                                (enhanced_feats.std(dim=0, keepdim=True) + 1e-10)
+            # w = torch.sigmoid(gnn.gate_linear(ins_feat))
+            final_feats = gaussians._ins_feat + enhanced_feats_norm
+
+            # ins_feat = gaussians._ins_feat
+            # ins_feat_norm = (ins_feat - ins_feat.mean(dim=0, keepdim=True)) / (ins_feat.std(dim=0, keepdim=True) + 1e-10)
+            # enhanced_feats = gnn(ins_feat_norm)
+            # enhanced_feats_norm = (enhanced_feats - enhanced_feats.mean(dim=0, keepdim=True)) / \
+            #                     (enhanced_feats.std(dim=0, keepdim=True) + 1e-10)
+            # final_feats = enhanced_feats_norm + ins_feat_norm
         else:
             final_feats = gaussians._ins_feat
 
@@ -471,17 +696,19 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             #           LERF 3W-4W steps; ScanNet 3w-5w steps #
             #           see Sec.3.1 in the paper              #
             # #################################################
-            if cb_mode is None:
-                # # (0) compute the average instance features within each mask. [num_mask, 6]
-                feat_mean_stack = mask_feature_mean(rendered_ins_feat, mask_bool, image_mask=rendered_silhouette)
-                # (1) intra-mask smoothing loss. Eq.(1) in the paper
-                loss_cohesion = cohesion_loss(rendered_ins_feat, mask_bool, feat_mean_stack)
-                # (2) inter-mask contrastive loss Eq.(2) in the paper
-                loss_separation = separation_loss(feat_mean_stack, iteration)
-                # total loss, opt.loss_weight: 0.1
+            ##############
+            ##############    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            ##############
 
+            if cb_mode is None:
+                # (0) compute the average instance features within each mask. [num_mask, 6]
+                feat_mean_stack = mask_feature_mean(rendered_ins_feat, mask_bool, image_mask=rendered_silhouette)
+
+                # loss = nt_xent_loss(feat_mean_stack, temperature=0.01) 
+                # lambda_weight = min(1, (iteration-30000) / 10000 * 1)
+                # loss = nt_xent_loss(feat_mean_stack, temperature=0.1) 
+                loss = separation_loss(feat_mean_stack, temperature=opt.temp)# + cohesion_loss(rendered_ins_feat, mask_bool, feat_mean_stack)
                 
-                loss = loss_separation + opt.loss_weight * loss_cohesion
 
                
                 # loss = infonce_loss(feat_mean_stack)
@@ -520,16 +747,23 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         #             loss += feat_loss
 
         # mask loss. modify -----
-        if viewpoint_cam.original_mask is not None:
-            gt_mask = viewpoint_cam.original_mask.cuda()
-            mask_loss = F.mse_loss(alpha, gt_mask)
-            loss = loss + mask_loss
+        # if viewpoint_cam.original_mask is not None:
+        #     gt_mask = viewpoint_cam.original_mask.cuda()
+        #     mask_loss = F.mse_loss(alpha, gt_mask)
+        #     loss = loss + mask_loss
         
         if no_need_bk == False:
             loss.backward()
+            pass
         if iteration == opt.iterations:
+            # print(f"ins_feat1 std: {gaussians._ins_feat.std(dim=0)}")
+            # print(f"final feats std: {final_feats.std(dim=0)}")
             gaussians._ins_feat = final_feats
-            ins_feat_kmeans.forward(gaussians)   # note: position weight
+            # print(f"ins_feat2 std: {gaussians._ins_feat.std(dim=0)}")
+            start_t = time.perf_counter()
+            ins_feat_kmeans.forward(gaussians)  # note: position weight
+            clustering_time = time.perf_counter() - start_t
+            print(f'Clustering time: {clustering_time:.2f} seconds')
         iter_end.record()
 
         # Save the intermediate training results. [OpenGaussian]
@@ -646,6 +880,13 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 scheduler.step()
                 torch.cuda.empty_cache()
 
+                # # 打印gnn
+                # if iteration in range(30000,31000,20):
+                #     print("After training:")
+                #     for name, param in gnn.named_parameters():
+                #         print(f"conv1.local_nn.weight: mean {gnn.conv1.local_nn.weight.mean().item():.4f}, " \
+                #         f"std {gnn.conv1.local_nn.weight.std().item():.4f}")
+
             if (iteration in checkpoint_iterations):
                 print("\n[ITER {}] Saving Checkpoint".format(iteration))
                 sys.stdout.flush()
@@ -661,7 +902,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 sys.stdout.flush()
                 if cluster_indices is None:
                     cluster_indices = ins_feat_kmeans.cls_ids   # fine-level cluster id
-
+                
                 construct_pseudo_ins_feat(scene, render, (pipe, background, first_iter),
                                           cluster_indices=cluster_indices, mode="lang",
                                           cluster_num=ins_feat_kmeans.centers.shape[0],
@@ -789,91 +1030,7 @@ def construct_pseudo_ins_feat(scene : Scene, renderFunc, renderArgs,
     # Preprocessing for Stage 2.2
     # determine how many objects are in each coarse cluster, not just setting a fixed k2 value.
     # ##################################################################################################
-    # torch.cuda.empty_cache()
-    # if mode=="leaf":
-    #     iClusterSubNum = torch.ones(cluster_indices.max()+1).to(torch.int32)
-    #     for idx, view in enumerate(tqdm(sorted_train_cameras, desc="render coarse-level cluster")):
-    #         if not view.data_on_gpu:
-    #             view.to_gpu()
-    #         render_pkg = renderFunc(view, scene.gaussians, *renderArgs, cluster_idx=cluster_indices, rescale=False,\
-    #                                 render_feat_map=False, render_cluster=True, origin_feat=True, better_vis=True,
-    #                                 root_num=root_num, leaf_num=leaf_num)
-    #         rendered_cluster_imgs = render_pkg["cluster_imgs"]  # coarse cluster feature map
-    #         rendered_cluster_silhouettes = render_pkg["cluster_silhouettes"] # coarse cluster mask
-    #         cluster_occur = render_pkg["cluster_occur"] # bool [k1] Whether coarse clusters visible in the current view
-
-    #         pser_cluster_pesudo_mask = []
-    #         i = -1
-    #         for cluster_idx in range(cluster_indices.max()+1):
-    #             if not cluster_occur[cluster_idx]:  # Process only coarse clusters visible in the current view
-    #                 continue
-
-    #             i += 1
-    #             rendered_ins_feat = rendered_cluster_imgs[i]    # cluster feat map
-    #             rendered_silhouette = (rendered_cluster_silhouettes[i] > 0.9).unsqueeze(0)  # cluster mask
-
-    #             # (1) compute the IoU of this cluster with pseudo masks.
-    #             ious = calculate_iou(view.pesudo_mask_bool, rendered_silhouette, base="former")
-    #             # pseudo masks with IoU above threshold
-    #             inters_mask = view.pesudo_mask_bool[ious[0] > 0.2]  # [num_mask, H, W]
-    #             inters_mask_ = inters_mask.sum(0).to(torch.bool)   # [H, W] bool
-    #             # pseudo mask features, noly for visalization [6, H, W]
-    #             inters_pesudo_ins_feat = view.pesudo_ins_feat * inters_mask_.unsqueeze(0) 
-
-    #             # (2) compute the distance between coarse cluster features and pseudo features
-    #             # mean feature of the pesudo mask, [num_mask, 6]
-    #             inters_mask_feat_mean = mask_feature_mean(view.pesudo_ins_feat, inters_mask) 
-    #             # mean feature of the cluster, [num_mask, 6]
-    #             cluster_mask_feat_mean = mask_feature_mean(rendered_ins_feat, inters_mask, image_mask=rendered_silhouette) 
-    #             # distance
-    #             l1_dis, l2_dis = calculate_distances(inters_mask_feat_mean, cluster_mask_feat_mean)   # metric="l1"
-
-    #             # (3) filter out some pseudo masks
-    #             inters_mask_filter = inters_mask[(l1_dis < 0.9) & (l2_dis < 0.5)]  # l2_disk < 0.8
-    #             if inters_mask_filter.shape[0] > 10:    # TODO 10? --> leaf_num
-    #                 smallest_10 = torch.topk(l1_dis, 10, largest=False)[1]
-    #                 inters_mask_filter = inters_mask[smallest_10]
-    #             inters_mask_filter_ = inters_mask_filter.sum(0).to(torch.bool) 
-    #             inters_pesudo_ins_feat2 = view.pesudo_ins_feat * inters_mask_filter_.unsqueeze(0) # noly for visalization
-    #             if inters_mask_filter_.any() == False:  # Skip if the cluster doesn’t intersect with any pseudo masks.
-    #                 cluster_occur[cluster_idx] = False
-    #                 continue
-                
-    #             pser_cluster_pesudo_mask.append(inters_mask_filter_)    # valid mask
-    #             # NOTE: (4) Determine the number of masks (i.e., objects) in each coarse cluster.
-    #             iClusterSubNum[cluster_idx] = max(iClusterSubNum[cluster_idx], inters_mask_filter.shape[0])
-
-    #             # (5) save some intermediate results for debugging
-    #             coarse_debug = False
-    #             if coarse_debug:
-    #                 cluster_path = os.path.join(scene.model_path, "train_process", "debug_coarse_cluster", "cluster")
-    #                 cluster_silhouette_path = os.path.join(scene.model_path, "train_process", "debug_coarse_cluster", "cluster_silhouette")
-    #                 cluster_inters_pesudo_path = os.path.join(scene.model_path, "train_process", "debug_coarse_cluster", "cluster_inters_pesudo")
-    #                 makedirs(cluster_path, exist_ok=True)
-    #                 makedirs(cluster_silhouette_path, exist_ok=True)
-    #                 makedirs(cluster_inters_pesudo_path, exist_ok=True)
-
-    #                 # coarse-level cluster feature map
-    #                 torchvision.utils.save_image(rendered_ins_feat[:3,:,:].cpu(), os.path.join(cluster_path, '{0:05d}'.format(idx) + f"_c_{cluster_idx}" + "_1.png"))
-    #                 # torchvision.utils.save_image(rendered_ins_feat[3:,:,:].cpu(), os.path.join(cluster_path, '{0:05d}'.format(idx) + f"_c_{cluster_idx}" + "_2.png"))
-    #                 torchvision.utils.save_image(rendered_silhouette.to(torch.float32).cpu(), os.path.join(cluster_silhouette_path, '{0:05d}'.format(idx) + f"_c_{cluster_idx}" + "_1.png"))
-
-    #                 # pseudo masks of coarse cluster (_f represents the filtered.)
-    #                 torchvision.utils.save_image(inters_pesudo_ins_feat[:3,:,:].cpu(), os.path.join(cluster_inters_pesudo_path, '{0:05d}'.format(idx) + f"_c_{cluster_idx}" + "_1.png"))
-    #                 # torchvision.utils.save_image(inters_pesudo_ins_feat[3:,:,:].cpu(), os.path.join(cluster_inters_pesudo_path, '{0:05d}'.format(idx) + f"_c_{cluster_idx}" + "_2.png"))
-    #                 torchvision.utils.save_image(inters_pesudo_ins_feat2[:3,:,:].cpu(), os.path.join(cluster_inters_pesudo_path, '{0:05d}'.format(idx) + f"_c_{cluster_idx}" + "_1_f.png"))
-    #                 # torchvision.utils.save_image(inters_pesudo_ins_feat2[3:,:,:].cpu(), os.path.join(cluster_inters_pesudo_path, '{0:05d}'.format(idx) + f"_c_{cluster_idx}" + "_2_f.png"))
-
-    #         if view.cluster_masks is None:
-    #             view.cluster_masks = pser_cluster_pesudo_mask   # pseudo masks of coarse cluster
-    #             view.bClusterOccur = cluster_occur              # whether visible in the current view
-
-    #         if view.data_on_gpu and save_memory:
-    #             view.to_cpu()
-
-    #     # update
-    #     scene.gaussians.iClusterSubNum = (iClusterSubNum + 1).clamp(max=leaf_num)
-    #     torch.cuda.empty_cache()
+   
     
     # ###########################################################################
     # [Stage 3] 2D mask(and language feat) - 3D fine level cluster association  # 
@@ -925,10 +1082,10 @@ def construct_pseudo_ins_feat(scene : Scene, renderFunc, renderArgs,
                 # only for visualization, [num_pesudo_mask, dim， H, W]
                 pesudo_mask_feat = view.pesudo_ins_feat * view.pesudo_mask_bool.unsqueeze(1)
                 # distance
-                l1_dis, _ = calculate_pairwise_distances(pred_mask_feat_mean, pesudo_mask_feat_mean, metric="l1")   # method="l1"
+                _,_,dis = calculate_pairwise_distances(pred_mask_feat_mean, pesudo_mask_feat_mean, metric="cosine")   # method="l1"
 
                 # (3) iou-feature distance joint score
-                scores = ious * (1-l1_dis)      # Eq.(5) in the paper
+                scores = ious * (1-dis)      # Eq.(5) in the paper
                 # (4) save the association result
                 max_score, max_ind = torch.max(scores, dim=-1)  # [num_leaf]
                 b_matched = max_score > 0.2     # todo

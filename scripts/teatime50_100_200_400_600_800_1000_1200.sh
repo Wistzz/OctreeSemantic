@@ -21,6 +21,6 @@ for min_cluster_size in "${min_cluster_sizes[@]}"; do
         --test_iterations 30000 \
         --spatial_grid_size 2.0 \
         --eval \
-        --start_checkpoint /data/sunwei/OctreeSemantic/output/teatime_infonce_nearest/chkpnt40000.pth
+        --start_checkpoint /data/sunwei/OctreeSemantic/output/47a9fd29-2/chkpnt40000.pth
 done
     

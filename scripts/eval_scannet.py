@@ -93,7 +93,7 @@ def calculate_metrics(gt, pred, total_classes):
     return ious, mean_iou, accuracy, mean_class_accuracy
 
 if __name__ == "__main__":
-    scene_list = [  'scene0000_00']
+    scene_list = [  'scene0645_00']
                 #   , 'scene0062_00', 'scene0070_00', 'scene0097_00', 'scene0140_00', 
                 #     'scene0200_00', 'scene0347_00', 'scene0400_00', 'scene0590_00', 'scene0645_00']
 
@@ -121,7 +121,7 @@ if __name__ == "__main__":
         updated_gt_labels = torch.from_numpy(updated_labels.astype(np.int64)).cuda()
         
         # (4) load gaussian ply file
-        model_path = 'output/9f5a17da-b/'#f"output/{scan_name}/"
+        model_path = 'output/d33dbd01-c/'#f"output/{scan_name}/"
         ply_path = os.path.join(model_path, f"point_cloud/iteration_{iteration}/point_cloud.ply")
         ply_data = PlyData.read(ply_path)
         vertex_data = ply_data['vertex'].data
@@ -139,7 +139,7 @@ if __name__ == "__main__":
         leaf_occu_count = torch.from_numpy(saved_data["occu_count.npy"]).cuda()  # [num_leaf=k1*k2] 
         leaf_ind = torch.from_numpy(saved_data["leaf_ind.npy"]).cuda()           # [num_pts] 
         leaf_lang_feat[leaf_occu_count < 2] *= 0.0
-        leaf_ind = leaf_ind.clamp(max=319)  # 64*5=320
+        # leaf_ind = leaf_ind.clamp(max=319)  # 64*5=320
 
         # (6) load query text feat.
         with open('assets/text_features.json', 'r') as f:

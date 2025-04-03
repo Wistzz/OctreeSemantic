@@ -297,29 +297,7 @@ class PointNetFeatureEnhancer(nn.Module):
         self.sampled_pos = None
         self.edge_index = None
         self.nearest_sampled_indices = None
-
-    # def precompute_sampling_and_graph(self, pos):
-    #     N = pos.size(0)  # 动态获取总点数
-    #     print('total points: ', N)
-    #     target_num = 2e5 # 固定采样点数
-        
-    #     if N <= target_num:
-    #         # 点数不足，直接使用所有点
-    #         self.sampled_indices = torch.arange(N, dtype=torch.long, device=pos.device)
-    #         self.sampled_pos = pos
-    #         M = N
-    #     else:
-    #         # 进行随机采样到20万点
-    #         self.sampled_indices = torch.randperm(N, device=pos.device)[:int(target_num)]
-    #         self.sampled_pos = pos[self.sampled_indices]
-    #         M = self.sampled_pos.size(0)
-        
-    #     # 构建k-NN图
-    #     self.edge_index = knn_graph(self.sampled_pos, k=self.k)
-        
-    #     # 查找最近邻
-    #     nearest_indices = knn(self.sampled_pos, pos, k=1)
-    #     self.nearest_sampled_indices = nearest_indices[1]
+        # self.gate_linear = nn.Linear(in_channels, 1)  # 用于生成门控值
 
     def precompute_sampling_and_graph(self, pos):
         N = pos.size(0)  # 动态获取总点数
@@ -643,13 +621,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 gnn.precompute_sampling_and_graph(gaussians._xyz.detach())
                 print(f"Precompute KNN: {time.time() - start:.2f} seconds")
             color_feats = gaussians._features_dc.squeeze(1).detach()  # [1024053, 3]
-            init_feats = torch.cat((gaussians._ins_feat, color_feats.detach()), dim=1)
+            init_feats = torch.cat((gaussians._ins_feat.detach(), color_feats.detach()), dim=1)
             ins_feat = init_feats
             ins_feat_norm = (ins_feat - ins_feat.mean(dim=0, keepdim=True)) / (ins_feat.std(dim=0, keepdim=True) + 1e-10)
             enhanced_feats = gnn(ins_feat_norm)#, gaussians._xyz.detach())
             enhanced_feats_norm = (enhanced_feats - enhanced_feats.mean(dim=0, keepdim=True)) / \
                                 (enhanced_feats.std(dim=0, keepdim=True) + 1e-10)
-            final_feats = enhanced_feats_norm + gaussians._ins_feat
+            # w = torch.sigmoid(gnn.gate_linear(ins_feat.detach()))
+            final_feats = gaussians._ins_feat + enhanced_feats_norm
 
             # ins_feat = gaussians._ins_feat
             # ins_feat_norm = (ins_feat - ins_feat.mean(dim=0, keepdim=True)) / (ins_feat.std(dim=0, keepdim=True) + 1e-10)

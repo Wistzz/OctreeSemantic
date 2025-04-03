@@ -156,7 +156,7 @@ class HDBSCAN_Clustering:
         self.centers = torch.empty(0)  # 存储聚类中心
         self.cls_ids = torch.empty(0)  # 存储样本标签
         self.min_cluster_size = min_cluster_size # HDBSCAN 的最小簇大小，类似于 min_samples （50-2000）
-        self.min_samples = 50        # 用于软聚类的参数，控制噪声点 （10-100）
+        self.min_samples = 3 #50        # 用于软聚类的参数，控制噪声点 （10-100）
         self.batch_size = batch_size
 
     def get_dist(self, x, y, mode='sq_euclidean'):
@@ -233,6 +233,24 @@ class HDBSCAN_Clustering:
             # ins = gaussian._ins_feat
             # xyz = gaussian._xyz
             feat = torch.cat((ins, pos_weight*xyz), dim=1)  # [N, 9]
+
+            
+            # from sklearn.manifold import TSNE
+            # import matplotlib.pyplot as plt
+            # # 计算 t-SNE 降维结果
+            # feat_2d = TSNE(n_components=2).fit_transform(feat.cpu().numpy())
+            # # 创建散点图
+            # plt.figure(figsize=(10, 8))  # 设置画布大小，可根据需要调整
+            # plt.scatter(feat_2d[:, 0], feat_2d[:, 1], s=1)  # 绘制散点图
+            # plt.title("t-SNE Visualization of Features")  # 添加标题
+            # plt.xlabel("Component 1")  # x 轴标签
+            # plt.ylabel("Component 2")  # y 轴标签
+            # # 保存为文件
+            # plt.savefig("tsne_visualization.png", dpi=300, bbox_inches='tight')  # 保存为 PNG 文件，dpi 控制分辨率
+            # plt.close()  # 关闭画布，避免内存占用
+
+
+
             # feat = ins
             # feat = xyz
 

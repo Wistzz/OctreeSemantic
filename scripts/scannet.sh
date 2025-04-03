@@ -21,10 +21,11 @@ eval "$(conda shell.bash hook)"
 conda activate opengs
 
 # ============== [10 scenes] ==============
-scan_list=("scene0000_00" "scene0062_00" "scene0070_00" "scene0097_00" "scene0140_00" \
-"scene0200_00" "scene0347_00" "scene0400_00" "scene0590_00" "scene0645_00")
+scan_list=("scene0645_00")
+#  "scene0062_00" "scene0070_00" "scene0097_00" "scene0140_00" \
+# "scene0200_00" "scene0347_00" "scene0400_00" "scene0590_00" "scene0645_00")
 
-gpu_num=0     # change!
+gpu_num=0   # change!
 for scan in "${scan_list[@]}"; do
     echo "Training for ${scan} ....."
     CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 501$gpu_num \
@@ -37,9 +38,9 @@ for scan in "${scan_list[@]}"; do
         --start_leaf_cb_iter 70_000 \
         --sam_level 0 \
         --temp 0.02 \
-        --min_cluster_size 10 \
-        --pos_weight 0 \
+        --min_cluster_size 100  \
+        --pos_weight 0.0 \
         --test_iterations 30000 \
         --eval \
-        # --start_checkpoint /data/sunwei/OctreeSemantic/output/scene0062_00/chkpnt30000.pth #/data/sunwei/OctreeSemantic/output/scene0000_00/chkpnt50000.pth #/data/sunwei/OctreeSemantic/output/scene0000_00/chkpnt30000.pth 
+        --start_checkpoint /data/sunwei/OctreeSemantic/output/scene0645_00/chkpnt30000.pth #/data/sunwei/OctreeSemantic/output/scene0000_00/chkpnt50000.pth #/data/sunwei/OctreeSemantic/output/scene0000_00/chkpnt30000.pth 
 done
