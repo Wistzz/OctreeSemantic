@@ -14,25 +14,25 @@ conda activate opengs
 # --pos_weight 0.5
 # --save_memory: Saves memory, but will reduce training speed. If your GPU memory > 24GB, you can omit this flag
 ##############################################
-# scan="figurines"
-# gpu_num=0 # change
-# echo "Training for ${scan} ....."
-# CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 400$gpu_num \
-#     -s /data/sunwei/OpenGaussian/data/lerf_ovs/${scan} \
-#     --iterations 40000 \
-#     --start_ins_feat_iter 30000 \
-#     --start_root_cb_iter 40000 \
-#     --start_leaf_cb_iter 50000 \
-#     --sam_level 3 \
-#     --cluster_num 256 \
-#     --pos_weight 0.1 \
-#     --temp 0.03 \
-#     --min_cluster_size 200 \
-#     --save_memory \
-#     --test_iterations 30000 \
-#     --spatial_grid_size 2.0 \
-#     --eval \
-#     --start_checkpoint /data/sunwei/gaussian-splatting/output/d8bf0888-b/chkpnt30000.pth #/data/sunwei/OctreeSemantic/output/figurines40000/chkpnt40000.pth # #/data/sunwei/OctreeSemantic/output/cea0aa87-8/chkpnt50000.pth #/
+scan="figurines"
+gpu_num=1 # change
+echo "Training for ${scan} ....."
+CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 400$gpu_num \
+    -s /data/sunwei/OpenGaussian/data/lerf_ovs/${scan} \
+    --iterations 40000 \
+    --start_ins_feat_iter 30000 \
+    --start_root_cb_iter 40000 \
+    --start_leaf_cb_iter 50000 \
+    --sam_level 3 \
+    --cluster_num 256 \
+    --pos_weight 0.5 \
+    --temp 0.08 \
+    --min_cluster_size 400 \
+    --save_memory \
+    --test_iterations 30000 \
+    --spatial_grid_size 2.0 \
+    --eval \
+    --start_checkpoint /data/sunwei/gaussian-splatting/output/figurines/chkpnt30000.pth #/data/sunwei/OctreeSemantic/output/ae83b5ba-0/chkpnt40000.pth # # #/data/sunwei/OctreeSemantic/output/cea0aa87-8/chkpnt50000.pth #/
 
 
 # # ###############################################
@@ -43,25 +43,25 @@ conda activate opengs
 # # # --pos_weight 0.5
 # # # No need to set save_memory, 24G is sufficient.
 # # ###############################################
-scan="waldo_kitchen"
-gpu_num=0       # change
-echo "Training for ${scan} ....."
-CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 441$gpu_num \
-    -s /data/sunwei/OpenGaussian/data/lerf_ovs/${scan} \
-    --iterations 40000 \
-    --start_ins_feat_iter 30000 \
-    --start_root_cb_iter 40000 \
-    --start_leaf_cb_iter 50000 \
-    --sam_level 3 \
-    --cluster_num 256 \
-    --temp 0.1 \
-    --min_cluster_size 800 \
-    --pos_weight 0.5 \
-    --save_memory \
-    --test_iterations 30000 \
-    --spatial_grid_size 2.0 \
-    --eval \
-    --start_checkpoint /data/sunwei/gaussian-splatting/output/waldo_kitchen/chkpnt30000.pth #/data/sunwei/OctreeSemantic/output/kitchen50000/chkpnt50000.pth #
+# scan="waldo_kitchen"
+# gpu_num=4       # change
+# echo "Training for ${scan} ....."
+# CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 441$gpu_num \
+#     -s /data/sunwei/OpenGaussian/data/lerf_ovs/${scan} \
+#     --iterations 40000 \
+#     --start_ins_feat_iter 30000 \
+#     --start_root_cb_iter 40000 \
+#     --start_leaf_cb_iter 50000 \
+#     --sam_level 3 \
+#     --cluster_num 256 \
+#     --temp 0.15 \
+#     --min_cluster_size 1400 \
+#     --pos_weight 0.1 \
+#     --save_memory \
+#     --test_iterations 30000 \
+#     --spatial_grid_size 2.0 \
+#     --eval \
+#     --start_checkpoint /data/sunwei/gaussian-splatting/output/waldo_kitchen/chkpnt30000.pth #/data/sunwei/OctreeSemantic/output/kitchen50000/chkpnt50000.pth #
 
 # ###############################################
 # #              (3/4) teatime
@@ -71,7 +71,7 @@ CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 441$gpu_num \
 # # --save_memory: Saves memory, but will reduce training speed. If your GPU memory > 24GB, you can omit this flag
 # ###############################################
 # scan="teatime"
-# gpu_num=7    # change
+# gpu_num=0    # change
 # echo "Training for ${scan} ....."
 # CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 603$gpu_num \
 #     -s /data/sunwei/OpenGaussian/data/lerf_ovs/${scan} \
@@ -81,14 +81,14 @@ CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 441$gpu_num \
 #     --start_leaf_cb_iter 50000 \
 #     --sam_level 3 \
 #     --cluster_num 256 \
-#     --temp 0.02 \
-#     --min_cluster_size 400 \
+#     --temp 0.09 \
+#     --min_cluster_size 250 \
 #     --pos_weight 0.5 \
 #     --save_memory \
 #     --test_iterations 30000 \
 #     --spatial_grid_size 2.0 \
 #     --eval \
-#     --start_checkpoint /data/sunwei/gaussian-splatting/output/teatime/chkpnt30000.pth #/data/sunwei/OctreeSemantic/output/0.02_teatime/chkpnt40000.pth #
+#     --start_checkpoint /data/sunwei/gaussian-splatting/output/teatime/chkpnt30000.pth #/data/sunwei/gaussian-splatting/output/teatime/chkpnt30000.pth # #/data/sunwei/OctreeSemantic/output/0.02_teatime/chkpnt40000.pth #
 
 
 # # ###############################################
@@ -101,22 +101,22 @@ CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 441$gpu_num \
 # # # No need to set save_memory, 24G is sufficient.
 # # ###############################################
 # scan="ramen"
-# gpu_num=6
+# gpu_num=1
 # echo "Training for ${scan} ....."
-# CUDA_VISIBLE_DEVICES=$gpu_num python train.py --port 642$gpu_num \
+# CUDA_VISIBLE_DEVICES=$gpu_num python train40000.py --port 642$gpu_num \
 #     -s /data/sunwei/OpenGaussian/data/lerf_ovs/${scan} \
-#     --iterations 40000 \
+#     --iterations 40001 \
 #     --start_ins_feat_iter 30000 \
 #     --start_root_cb_iter 40000 \
 #     --start_leaf_cb_iter 50000 \
 #     --sam_level 3 \
 #     --cluster_num 256 \
-#     --temp 0.03 \
-#     --min_cluster_size 50 \
-#     --pos_weight 0.5 \
+#     --temp 0.08 \
+#     --min_cluster_size 1000 \
+#     --pos_weight 2 \
 #     --save_memory \
 #     --test_iterations 30000 \
 #     --spatial_grid_size 2.0 \
 #     --eval \
-#     --start_checkpoint /data/sunwei/gaussian-splatting/output/ramen/chkpnt30000.pth # /data/sunwei/OctreeSemantic/output/0.03_ramen/chkpnt40000.pth # #
+#     --start_checkpoint /data/sunwei/OctreeSemantic/output/0.03_ramen/chkpnt40000.pth #/data/sunwei/gaussian-splatting/output/ramen/chkpnt30000.pth # /data/sunwei/OctreeSemantic/output/0.03_ramen/chkpnt40000.pth # #
 

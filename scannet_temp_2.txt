@@ -1,0 +1,46 @@
+Training for scene0590_00 .....
+Optimizing 
+Output folder: ./output/39aceae2-1 [09/04 21:19:34]
+Tensorboard not available: not logging progress [09/04 21:19:34]
+Found transforms_train.json file, assuming Blender data set! [09/04 21:19:34]
+Reading Training Transforms [09/04 21:19:34]
+Reading Test Transforms [09/04 21:19:44]
+Resolution:  1.0 [09/04 21:19:55]
+Loading Training Cameras [09/04 21:19:55]
+Loading Test Cameras [09/04 21:20:00]
+Number of points at initialisation :  222957 [09/04 21:20:03]
+loading 3dgs from /data/sunwei/OctreeSemantic/output/scene0590_00_nognn/chkpnt30000.pth [09/04 21:20:03]
+[Stage 1] Start continuous instance feature learning ... [09/04 21:20:03]
+total points:  222957 [09/04 21:20:03]
+Precompute KNN: 26.08 seconds [09/04 21:20:29]
+Clustering time: 38.68 seconds [09/04 21:23:07]
+
+[ITER 35000] Saving Gaussians [09/04 21:23:07]
+
+[ITER 35000] Saving Checkpoint [09/04 21:23:10]
+[Stage 3] Start 2D language feature - 3D cluster association ... [09/04 21:23:10]
+
+Training complete. [09/04 21:23:16]
+Training for scene0645_00 .....
+Optimizing 
+Output folder: ./output/c3e529bd-e [09/04 21:23:22]
+Tensorboard not available: not logging progress [09/04 21:23:22]
+Found transforms_train.json file, assuming Blender data set! [09/04 21:23:22]
+Reading Training Transforms [09/04 21:23:22]
+Reading Test Transforms [09/04 21:23:38]
+Resolution:  1.0 [09/04 21:23:57]
+Loading Training Cameras [09/04 21:23:57]
+Loading Test Cameras [09/04 21:24:04]
+Number of points at initialisation :  352477 [09/04 21:24:07]
+loading 3dgs from /data/sunwei/OctreeSemantic/output/scene0645_00_nognn/chkpnt30000.pth [09/04 21:24:08]
+[Stage 1] Start continuous instance feature learning ... [09/04 21:24:08]
+total points:  352477 [09/04 21:24:08]
+Precompute KNN: 40.95 seconds [09/04 21:24:49]
+Clustering time: 110.56 seconds [09/04 21:28:33]
+
+[ITER 35000] Saving Gaussians [09/04 21:28:34]
+
+[ITER 35000] Saving Checkpoint [09/04 21:28:38]
+[Stage 3] Start 2D language feature - 3D cluster association ... [09/04 21:28:38]
+
+Training complete. [09/04 21:28:43]

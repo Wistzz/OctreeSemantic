@@ -35,9 +35,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import PointNetConv, knn_graph, fps
 from torch_geometric.data import Data
-from scene.kmeans_classic import HDBSCAN_Clustering
+from scene.kmeans_classic import HDBSCAN_Clustering, DBSCAN_Clustering
 # from scene.xmeans import XMeans
-# from scene.dbscan import DBSCANCluster
 from bitarray import bitarray
 from utils.system_utils import mkdir_p
 from utils.opengs_utlis import mask_feature_mean, pair_mask_feature_mean, \

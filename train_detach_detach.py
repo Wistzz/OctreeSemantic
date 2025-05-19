@@ -37,7 +37,7 @@ from torch_geometric.nn import PointNetConv, knn_graph, fps
 from torch_geometric.data import Data
 from scene.kmeans_classic import HDBSCAN_Clustering
 # from scene.xmeans import XMeans
-# from scene.dbscan import DBSCANCluster
+from scene.dbscan import DBSCANCluster
 from bitarray import bitarray
 from utils.system_utils import mkdir_p
 from utils.opengs_utlis import mask_feature_mean, pair_mask_feature_mean, \
@@ -297,7 +297,7 @@ class PointNetFeatureEnhancer(nn.Module):
         self.sampled_pos = None
         self.edge_index = None
         self.nearest_sampled_indices = None
-        self.gate_linear = nn.Linear(in_channels, 1)  # 用于生成门控值
+        # self.gate_linear = nn.Linear(in_channels, 1)  # 用于生成门控值
 
     def precompute_sampling_and_graph(self, pos):
         N = pos.size(0)  # 动态获取总点数
@@ -507,7 +507,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         ins_feat_continue = None    # not used
 
     # initialize the clustering
-    # ins_feat_kmeans = DBSCAN_Clustering()
+    # ins_feat_kmeans = DBSCANCluster()
     ins_feat_kmeans = HDBSCAN_Clustering(min_cluster_size=opt.min_cluster_size)
     # 使用 GNN
     # gnn = EdgeConvFeatureEnhancer(in_channels=6, out_channels=6, k=24, sampling_ratio=0.1).cuda()    # optimizer = torch.optim.AdamW([
@@ -621,14 +621,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 gnn.precompute_sampling_and_graph(gaussians._xyz.detach())
                 print(f"Precompute KNN: {time.time() - start:.2f} seconds")
             color_feats = gaussians._features_dc.squeeze(1).detach()  # [1024053, 3]
-            init_feats = torch.cat((gaussians._ins_feat, color_feats.detach()), dim=1)
+            init_feats = torch.cat((gaussians._ins_feat.detach(), color_feats.detach()), dim=1)
             ins_feat = init_feats
             ins_feat_norm = (ins_feat - ins_feat.mean(dim=0, keepdim=True)) / (ins_feat.std(dim=0, keepdim=True) + 1e-10)
             enhanced_feats = gnn(ins_feat_norm)#, gaussians._xyz.detach())
             enhanced_feats_norm = (enhanced_feats - enhanced_feats.mean(dim=0, keepdim=True)) / \
                                 (enhanced_feats.std(dim=0, keepdim=True) + 1e-10)
-            w = torch.sigmoid(gnn.gate_linear(ins_feat.detach()))
-            final_feats = (1-w)*gaussians._ins_feat + w*enhanced_feats_norm
+            # w = torch.sigmoid(gnn.gate_linear(ins_feat.detach()))
+            final_feats = gaussians._ins_feat + enhanced_feats_norm
 
             # ins_feat = gaussians._ins_feat
             # ins_feat_norm = (ins_feat - ins_feat.mean(dim=0, keepdim=True)) / (ins_feat.std(dim=0, keepdim=True) + 1e-10)

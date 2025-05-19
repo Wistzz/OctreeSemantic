@@ -18,7 +18,7 @@ from utils.sh_utils import eval_sh
 from utils.opengs_utlis import *
 # from sklearn.neighbors import NearestNeighbors
 # import pytorch3d.ops
-# import faiss
+import faiss
 
 def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, iteration,
             scaling_modifier = 1.0, override_color = None, visible_mask = None, mask_num=0,
@@ -516,53 +516,64 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
 
             # TODO post process (for 3D object selection)
             # pre_count = filter_idx.sum()
-            # max_time = 5
-            # if post_process and max_time > 0:
-            #     # GPU
-            #     def knn(means3D, filter_idx, K):
-            #         means3D_filtered = means3D[filter_idx].to('cuda').float()
-            #         dim = means3D_filtered.shape[1]
-            #         index = faiss.IndexFlatL2(dim)
-            #         index = faiss.index_cpu_to_all_gpus(index)
-            #         index.add(means3D_filtered.cpu().numpy())
-            #         dists, _ = index.search(means3D_filtered.cpu().numpy(), K)
-            #         dists = torch.tensor(dists**2).to(means3D.device).float()
-            #         return dists
-            # max_time = 5
-            # if post_process and max_time > 0:
-            #     # GPU
-            #     def knn(means3D, filter_idx, K):
-            #         means3D_filtered = means3D[filter_idx].to('cuda').float()
-            #         num_points = means3D_filtered.shape[0]
+            max_time = 5
+            if post_process and max_time > 0:
+                # 定义 k-NN 搜索函数，使用 Faiss
+                def knn_faiss(means3D, filter_idx, K):
+                    # 提取过滤后的点云数据
+                    means3D_filtered = means3D[filter_idx].float()  # 确保数据类型为 float32
+                    num_points = means3D_filtered.shape[0]
 
-            #         # 计算所有点对之间的欧氏距离平方
-            #         dists = torch.cdist(means3D_filtered, means3D_filtered, p=2) ** 2
+                    # 如果点数不足以计算 K 个最近邻，调整 K
+                    K = min(K, num_points)
 
-            #         # 对每个点选择最近的 K 个点的距离
-            #         topk_dists, _ = torch.topk(dists, k=K, dim=1, largest=False)
+                    # 将数据移动到 CPU 并转换为 numpy 数组（Faiss 需要 numpy 格式）
+                    means3D_filtered_np = means3D_filtered.cpu().numpy()
 
-            #         return topk_dists
+                    # 创建 Faiss 索引（使用 L2 距离）
+                    dim = means3D_filtered.shape[1]
+                    index = faiss.IndexFlatL2(dim)
 
+                    # 如果有 GPU 支持，可以将索引移动到 GPU
+                    if torch.cuda.is_available() and means3D.is_cuda:
+                        res = faiss.StandardGpuResources()  # 创建 GPU 资源
+                        index = faiss.index_cpu_to_gpu(res, 0, index)  # 将索引移动到 GPU
 
-            #     nearest_k_distance = knn(means3D, filter_idx, int(filter_idx.sum() ** 0.5))
-            #     mean_nearest_k_distance, std_nearest_k_distance = nearest_k_distance.mean(), nearest_k_distance.std()
-            #     # print(std_nearest_k_distance, "std_nearest_k_distance")
+                    # 添加数据到索引
+                    index.add(means3D_filtered_np)
 
-            #     mask = nearest_k_distance.mean(dim = -1) < mean_nearest_k_distance + std_nearest_k_distance
-            #     # mask = nearest_k_distance.mean(dim = -1) < mean_nearest_k_distance + 0.1 * std_nearest_k_distance
+                    # 搜索 K 个最近邻（包括点自身）
+                    dists, _ = index.search(means3D_filtered_np, K)
 
-            #     mask = mask.squeeze()
-            #     if filter_idx is not None:
-            #         filter_idx[filter_idx != 0] = mask
-            #     max_time -= 1
-            
+                    # 将距离转换为张量，并移动到原始设备
+                    dists = torch.tensor(dists).to(means3D.device).float()
+
+                    # Faiss 返回的是距离的平方根（L2 距离），而 pytorch3d 返回的是距离的平方
+                    # 为了保持一致，我们将 dists 平方
+                    dists = dists ** 2
+
+                    # 调整形状以匹配 pytorch3d 的输出：(1, num_points, K)
+                    dists = dists.unsqueeze(0)
+
+                    return dists
+
+                # 计算 k-NN 距离
+                nearest_k_distance = knn_faiss(means3D, filter_idx, K=int(filter_idx.sum() ** 0.5))
+                mean_nearest_k_distance, std_nearest_k_distance = nearest_k_distance.mean(), nearest_k_distance.std()
+                # print(std_nearest_k_distance, "std_nearest_k_distance")
+
+                mask = nearest_k_distance.mean(dim=-1) < mean_nearest_k_distance + std_nearest_k_distance
+                # mask = nearest_k_distance.mean(dim=-1) < mean_nearest_k_distance + 0.1 * std_nearest_k_distance
+
+                mask = mask.squeeze()
+                if filter_idx is not None:
+                    filter_idx[filter_idx != 0] = mask
+                max_time -= 1
             
             if filter_idx.sum() < 10:
                 continue
             # record the fine cluster id appears in the current view.
             occured_id.append(idx)
-
-
 
             # note: render cluster rgb or feat.
             if seg_rgb:

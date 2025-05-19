@@ -93,11 +93,11 @@ def calculate_metrics(gt, pred, total_classes):
     return ious, mean_iou, accuracy, mean_class_accuracy
 
 if __name__ == "__main__":
-    scene_list = [  'scene0645_00']
+    scene_list = [  'scene0000_00']
                 #   , 'scene0062_00', 'scene0070_00', 'scene0097_00', 'scene0140_00', 
                 #     'scene0200_00', 'scene0347_00', 'scene0400_00', 'scene0590_00', 'scene0645_00']
 
-    iteration = 50000
+    iteration = 40000
     for scan_name in scene_list:
         # (1) GT ply    change!
         gt_file_path = f"/data/sunwei/OpenGaussian/data/{scan_name}/{scan_name}_vh_clean_2.labels.ply"
@@ -121,7 +121,7 @@ if __name__ == "__main__":
         updated_gt_labels = torch.from_numpy(updated_labels.astype(np.int64)).cuda()
         
         # (4) load gaussian ply file
-        model_path = 'output/d33dbd01-c/'#f"output/{scan_name}/"
+        model_path = 'output/39fb510d-8/'#f"output/{scan_name}/"
         ply_path = os.path.join(model_path, f"point_cloud/iteration_{iteration}/point_cloud.ply")
         ply_data = PlyData.read(ply_path)
         vertex_data = ply_data['vertex'].data

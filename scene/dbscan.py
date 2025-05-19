@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.cluster import DBSCAN
 
 class DBSCANCluster():
-    def __init__(self, eps=0.3, min_samples=10, dim=9):
+    def __init__(self, eps=0.3, min_samples=100, dim=9):
         self.eps = eps  # DBSCAN 的邻域半径
         self.min_samples = min_samples  # DBSCAN 的最小样本数
         self.vec_dim = dim  # 特征维度

@@ -1,0 +1,184 @@
+Training for scene0000_00 .....
+Optimizing 
+Output folder: ./output/65bb5f0b-5 [09/04 19:38:09]
+Tensorboard not available: not logging progress [09/04 19:38:09]
+Found transforms_train.json file, assuming Blender data set! [09/04 19:38:09]
+Reading Training Transforms [09/04 19:38:09]
+Reading Test Transforms [09/04 19:38:29]
+Resolution:  1.0 [09/04 19:38:49]
+Loading Training Cameras [09/04 19:38:49]
+Loading Test Cameras [09/04 19:38:56]
+Number of points at initialisation :  81369 [09/04 19:39:01]
+loading 3dgs from /data/sunwei/OctreeSemantic/output/scene0000_00_nognn/chkpnt30000.pth [09/04 19:39:01]
+[Stage 1] Start continuous instance feature learning ... [09/04 19:39:01]
+total points:  81369 [09/04 19:39:01]
+Precompute KNN: 0.20 seconds [09/04 19:39:01]
+Clustering time: 27.06 seconds [09/04 19:40:15]
+
+[ITER 32000] Saving Gaussians [09/04 19:40:16]
+
+[ITER 32000] Saving Checkpoint [09/04 19:40:17]
+[Stage 3] Start 2D language feature - 3D cluster association ... [09/04 19:40:17]
+
+Training complete. [09/04 19:40:23]
+Training for scene0062_00 .....
+Optimizing 
+Output folder: ./output/1fff45f1-8 [09/04 19:40:29]
+Tensorboard not available: not logging progress [09/04 19:40:29]
+Found transforms_train.json file, assuming Blender data set! [09/04 19:40:29]
+Reading Training Transforms [09/04 19:40:29]
+Reading Test Transforms [09/04 19:40:32]
+Resolution:  1.0 [09/04 19:40:36]
+Loading Training Cameras [09/04 19:40:36]
+Loading Test Cameras [09/04 19:40:40]
+Number of points at initialisation :  51610 [09/04 19:40:40]
+loading 3dgs from /data/sunwei/OctreeSemantic/output/scene0062_00_nognn/chkpnt30000.pth [09/04 19:40:40]
+[Stage 1] Start continuous instance feature learning ... [09/04 19:40:41]
+total points:  51610 [09/04 19:40:41]
+Precompute KNN: 0.10 seconds [09/04 19:40:41]
+Clustering time: 8.89 seconds [09/04 19:41:26]
+
+[ITER 32000] Saving Gaussians [09/04 19:41:26]
+
+[ITER 32000] Saving Checkpoint [09/04 19:41:27]
+[Stage 3] Start 2D language feature - 3D cluster association ... [09/04 19:41:27]
+
+Training complete. [09/04 19:41:28]
+Training for scene0070_00 .....
+Optimizing 
+Output folder: ./output/162a1b4f-3 [09/04 19:41:34]
+Tensorboard not available: not logging progress [09/04 19:41:34]
+Found transforms_train.json file, assuming Blender data set! [09/04 19:41:34]
+Reading Training Transforms [09/04 19:41:34]
+Reading Test Transforms [09/04 19:41:38]
+Resolution:  1.0 [09/04 19:41:44]
+Loading Training Cameras [09/04 19:41:44]
+Loading Test Cameras [09/04 19:41:48]
+Number of points at initialisation :  109380 [09/04 19:41:49]
+loading 3dgs from /data/sunwei/OctreeSemantic/output/scene0070_00_nognn/chkpnt30000.pth [09/04 19:41:50]
+[Stage 1] Start continuous instance feature learning ... [09/04 19:41:50]
+total points:  109380 [09/04 19:41:50]
+Precompute KNN: 13.01 seconds [09/04 19:42:03]
+Clustering time: 31.45 seconds [09/04 19:43:23]
+
+[ITER 32000] Saving Gaussians [09/04 19:43:24]
+
+[ITER 32000] Saving Checkpoint [09/04 19:43:25]
+[Stage 3] Start 2D language feature - 3D cluster association ... [09/04 19:43:25]
+
+Training complete. [09/04 19:43:28]
+Training for scene0097_00 .....
+Optimizing 
+Output folder: ./output/df068af9-4 [09/04 19:43:34]
+Tensorboard not available: not logging progress [09/04 19:43:34]
+Found transforms_train.json file, assuming Blender data set! [09/04 19:43:34]
+Reading Training Transforms [09/04 19:43:34]
+Reading Test Transforms [09/04 19:43:37]
+Resolution:  1.0 [09/04 19:43:40]
+Loading Training Cameras [09/04 19:43:40]
+Loading Test Cameras [09/04 19:43:44]
+Number of points at initialisation :  72007 [09/04 19:43:44]
+loading 3dgs from /data/sunwei/OctreeSemantic/output/scene0097_00_nognn/chkpnt30000.pth [09/04 19:43:45]
+[Stage 1] Start continuous instance feature learning ... [09/04 19:43:45]
+total points:  72007 [09/04 19:43:45]
+Precompute KNN: 0.18 seconds [09/04 19:43:45]
+Clustering time: 13.80 seconds [09/04 19:44:37]
+
+[ITER 32000] Saving Gaussians [09/04 19:44:38]
+
+[ITER 32000] Saving Checkpoint [09/04 19:44:39]
+[Stage 3] Start 2D language feature - 3D cluster association ... [09/04 19:44:39]
+
+Training complete. [09/04 19:44:40]
+Training for scene0140_00 .....
+Optimizing 
+Output folder: ./output/e66fccd3-7 [09/04 19:44:46]
+Tensorboard not available: not logging progress [09/04 19:44:46]
+Found transforms_train.json file, assuming Blender data set! [09/04 19:44:46]
+Reading Training Transforms [09/04 19:44:46]
+Reading Test Transforms [09/04 19:45:02]
+Resolution:  1.0 [09/04 19:45:20]
+Loading Training Cameras [09/04 19:45:20]
+Loading Test Cameras [09/04 19:45:27]
+Number of points at initialisation :  372941 [09/04 19:45:31]
+loading 3dgs from /data/sunwei/OctreeSemantic/output/scene0140_00_nognn/chkpnt30000.pth [09/04 19:45:31]
+[Stage 1] Start continuous instance feature learning ... [09/04 19:45:31]
+total points:  372941 [09/04 19:45:31]
+Precompute KNN: 43.32 seconds [09/04 19:46:15]
+Clustering time: 197.94 seconds [09/04 19:50:22]
+
+[ITER 32000] Saving Gaussians [09/04 19:50:23]
+
+[ITER 32000] Saving Checkpoint [09/04 19:50:28]
+[Stage 3] Start 2D language feature - 3D cluster association ... [09/04 19:50:28]
+
+Training complete. [09/04 19:50:44]
+Training for scene0347_00 .....
+Optimizing 
+Output folder: ./output/9ea9c114-3 [09/04 19:50:50]
+Tensorboard not available: not logging progress [09/04 19:50:50]
+Found transforms_train.json file, assuming Blender data set! [09/04 19:50:50]
+Reading Training Transforms [09/04 19:50:50]
+Reading Test Transforms [09/04 19:50:54]
+Resolution:  1.0 [09/04 19:50:59]
+Loading Training Cameras [09/04 19:50:59]
+Loading Test Cameras [09/04 19:51:03]
+Number of points at initialisation :  67984 [09/04 19:51:04]
+loading 3dgs from /data/sunwei/OctreeSemantic/output/scene0347_00_nognn/chkpnt30000.pth [09/04 19:51:04]
+[Stage 1] Start continuous instance feature learning ... [09/04 19:51:04]
+total points:  67984 [09/04 19:51:04]
+Precompute KNN: 0.15 seconds [09/04 19:51:04]
+Clustering time: 16.69 seconds [09/04 19:52:02]
+
+[ITER 32000] Saving Gaussians [09/04 19:52:02]
+
+[ITER 32000] Saving Checkpoint [09/04 19:52:03]
+[Stage 3] Start 2D language feature - 3D cluster association ... [09/04 19:52:03]
+
+Training complete. [09/04 19:52:05]
+Training for scene0590_00 .....
+Optimizing 
+Output folder: ./output/9df1369e-8 [09/04 19:52:11]
+Tensorboard not available: not logging progress [09/04 19:52:11]
+Found transforms_train.json file, assuming Blender data set! [09/04 19:52:11]
+Reading Training Transforms [09/04 19:52:11]
+Reading Test Transforms [09/04 19:52:21]
+Resolution:  1.0 [09/04 19:52:33]
+Loading Training Cameras [09/04 19:52:33]
+Loading Test Cameras [09/04 19:52:38]
+Number of points at initialisation :  222957 [09/04 19:52:41]
+loading 3dgs from /data/sunwei/OctreeSemantic/output/scene0590_00_nognn/chkpnt30000.pth [09/04 19:52:41]
+[Stage 1] Start continuous instance feature learning ... [09/04 19:52:41]
+total points:  222957 [09/04 19:52:41]
+Precompute KNN: 26.07 seconds [09/04 19:53:07]
+Clustering time: 83.66 seconds [09/04 19:55:18]
+
+[ITER 32000] Saving Gaussians [09/04 19:55:19]
+
+[ITER 32000] Saving Checkpoint [09/04 19:55:21]
+[Stage 3] Start 2D language feature - 3D cluster association ... [09/04 19:55:22]
+
+Training complete. [09/04 19:55:25]
+Training for scene0645_00 .....
+Optimizing 
+Output folder: ./output/3bef673f-4 [09/04 19:55:31]
+Tensorboard not available: not logging progress [09/04 19:55:31]
+Found transforms_train.json file, assuming Blender data set! [09/04 19:55:31]
+Reading Training Transforms [09/04 19:55:31]
+Reading Test Transforms [09/04 19:55:46]
+Resolution:  1.0 [09/04 19:56:05]
+Loading Training Cameras [09/04 19:56:05]
+Loading Test Cameras [09/04 19:56:12]
+Number of points at initialisation :  352477 [09/04 19:56:15]
+loading 3dgs from /data/sunwei/OctreeSemantic/output/scene0645_00_nognn/chkpnt30000.pth [09/04 19:56:16]
+[Stage 1] Start continuous instance feature learning ... [09/04 19:56:16]
+total points:  352477 [09/04 19:56:16]
+Precompute KNN: 41.04 seconds [09/04 19:56:57]
+Clustering time: 197.53 seconds [09/04 20:00:58]
+
+[ITER 32000] Saving Gaussians [09/04 20:00:59]
+
+[ITER 32000] Saving Checkpoint [09/04 20:01:03]
+[Stage 3] Start 2D language feature - 3D cluster association ... [09/04 20:01:04]
+
+Training complete. [09/04 20:01:10]

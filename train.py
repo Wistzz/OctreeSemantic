@@ -37,7 +37,7 @@ from torch_geometric.nn import PointNetConv, knn_graph, fps
 from torch_geometric.data import Data
 from scene.kmeans_classic import HDBSCAN_Clustering
 # from scene.xmeans import XMeans
-# from scene.dbscan import DBSCANCluster
+from scene.dbscan import DBSCANCluster
 from bitarray import bitarray
 from utils.system_utils import mkdir_p
 from utils.opengs_utlis import mask_feature_mean, pair_mask_feature_mean, \
@@ -507,7 +507,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         ins_feat_continue = None    # not used
 
     # initialize the clustering
-    # ins_feat_kmeans = DBSCAN_Clustering()
+    # ins_feat_kmeans = DBSCANCluster()
     ins_feat_kmeans = HDBSCAN_Clustering(min_cluster_size=opt.min_cluster_size)
     # 使用 GNN
     # gnn = EdgeConvFeatureEnhancer(in_channels=6, out_channels=6, k=24, sampling_ratio=0.1).cuda()    # optimizer = torch.optim.AdamW([
